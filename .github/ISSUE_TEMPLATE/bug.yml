@@ -1,0 +1,39 @@
+name: Bug
+description: Comportamiento incorrecto o regresion
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripcion
+      description: Que ocurre y cual era el comportamiento esperado.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Pasos para reproducir
+      placeholder: |
+        1. Ejecutar...
+        2. Abrir...
+        3. Observar...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidencia
+      description: Logs, capturas o mensajes de error relevantes. No incluir secretos.
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Entorno
+      options:
+        - Local
+        - CI
+        - Cloud
+        - Otro
+    validations:
+      required: true
+

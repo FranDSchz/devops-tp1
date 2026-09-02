@@ -1,0 +1,43 @@
+name: Tarea
+description: Trabajo planificado del proyecto
+title: "[Task]: "
+labels: []
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Frontend
+        - API
+        - Redis
+        - Infraestructura
+        - CI/CD
+        - Seguridad
+        - Cloud
+        - Documentacion
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objetivo
+      description: Que resultado debe producir esta tarea.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Criterios de aceptacion
+      description: Lista de condiciones verificables para considerar terminada la tarea.
+      placeholder: |
+        - [ ] Criterio 1
+        - [ ] Criterio 2
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencias o bloqueos
+      description: Issues, decisiones o recursos necesarios. Escribir "Ninguno" si no aplica.
+
