@@ -6,7 +6,12 @@ OpsBoard sera una aplicacion web sencilla para registrar y gestionar incidentes 
 
 ## Estado
 
-El proyecto se encuentra en la **Fase 0: inicializacion organizativa**. Todavia no contiene codigo de aplicacion ni infraestructura ejecutable.
+- **M0**: completado (documentacion, plantillas y organizacion inicial).
+- **M1**: completado (aplicacion base: API, web y tests unitarios).
+- **M2**: completado (contenedores, Nginx, tres replicas web y tres API, balanceo y tolerancia a fallos).
+- **M3** (CI, seguridad y Registry) y **M4** (cloud y entrega): pendientes.
+
+La aplicacion es ejecutable: ver [Ejecucion local](#ejecucion-local-docker-compose).
 
 Fecha de entrega indicada en la consigna: **lunes 14 de septiembre de 2026**.
 
@@ -75,7 +80,19 @@ docs/
 
 ## Ejecucion local (Docker Compose)
 
-Requisito: Docker y Docker Compose instalados.
+Requisitos:
+
+- Docker instalado.
+- Docker Compose **v2** (comando `docker compose` con un espacio, no `docker-compose`).
+
+Verificar la instalacion:
+
+```bash
+docker --version
+docker compose version
+```
+
+Levantar el stack completo:
 
 ```bash
 # Desde la raiz del repositorio
@@ -83,13 +100,44 @@ cd infrastructure/compose
 docker compose up --build
 ```
 
-La aplicacion queda disponible en <http://localhost:8080>.
+La aplicacion queda disponible en <http://localhost:8080>. Nginx expone el unico puerto de entrada (`8080`) y balancea entre 3 nodos web y 3 nodos API.
 
-- Nginx expone el unico puerto de entrada (`8080`) y balancea entre 3 nodos web y 3 nodos API.
 - Redis se ejecuta en su propio contenedor con un volumen persistente.
 - Cada nodo API responde el header `X-Instance-ID` y el endpoint `/health` devuelve la instancia que lo atendio (permite demostrar el balanceo).
 
 Para detener el stack: `docker compose down` (agregar `-v` para borrar tambien el volumen de Redis).
+
+### Demostrar el balanceo
+
+Ver que distintas replicas API atienden cada peticion:
+
+```bash
+for i in {1..9}; do curl -s http://localhost:8080/health; echo; done
+```
+
+Se observan respuestas alternadas entre `api-1`, `api-2` y `api-3`.
+
+### Demostrar tolerancia a la caida de una instancia
+
+1. Detener una replica (por ejemplo `api-2`):
+
+```bash
+docker stop opsboard-api-2
+```
+
+2. Repetir las peticiones y comprobar que el servicio sigue respondiendo:
+
+```bash
+for i in {1..6}; do curl -s http://localhost:8080/health; echo; done
+```
+
+Solo responden las instancias activas (`api-1` y `api-3`).
+
+3. Volver a levantar la instancia detenida:
+
+```bash
+docker start opsboard-api-2
+```
 
 Para inspeccionar los datos en Redis ver [cheatsheet-redis.md](docs/cheatsheet-redis.md).
 

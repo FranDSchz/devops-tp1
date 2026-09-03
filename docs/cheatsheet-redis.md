@@ -1,13 +1,10 @@
 ## Redis
 
-### Instalacion
-```
-sudo apt-get install redis
-```
+> **En OpsBoard, Redis corre dentro de un contenedor de Docker** (servicio `redis` del `docker compose`), por lo que no hace falta instalarlo en la maquina local. Las siguientes secciones de instalacion son referencia general para usar Redis fuera del proyecto.
 
-### Instalarlo con Docker
+### Instalarlo con Docker (referencia general)
 ```
-docker run -d --name redis -p 6379:6379 redis:<version>
+docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 - Si no tenes instalado redis-cli
 ```
@@ -18,7 +15,7 @@ docker exec -it redis redis-cli
 redis-cli -h 127.0.0.1 -p 6379
 ```
 
-### Acivarlo
+### Activarlo
 ```
 redis-server
 ```
