@@ -60,7 +60,7 @@ La arquitectura completa con proxy y replicas se ejecutara localmente mediante D
 
 ## Organizacion del repositorio
 
-El proyecto se desarrollara como monorepo. La estructura de aplicacion e infraestructura se incorporara durante las siguientes fases:
+El proyecto se desarrollara como monorepo:
 
 ```text
 apps/
@@ -72,6 +72,26 @@ infrastructure/
 docs/
 .github/
 ```
+
+## Ejecucion local (Docker Compose)
+
+Requisito: Docker y Docker Compose instalados.
+
+```bash
+# Desde la raiz del repositorio
+cd infrastructure/compose
+docker compose up --build
+```
+
+La aplicacion queda disponible en <http://localhost:8080>.
+
+- Nginx expone el unico puerto de entrada (`8080`) y balancea entre 3 nodos web y 3 nodos API.
+- Redis se ejecuta en su propio contenedor con un volumen persistente.
+- Cada nodo API responde el header `X-Instance-ID` y el endpoint `/health` devuelve la instancia que lo atendio (permite demostrar el balanceo).
+
+Para detener el stack: `docker compose down` (agregar `-v` para borrar tambien el volumen de Redis).
+
+Para inspeccionar los datos en Redis ver [cheatsheet-redis.md](docs/cheatsheet-redis.md).
 
 ## Colaboracion
 
