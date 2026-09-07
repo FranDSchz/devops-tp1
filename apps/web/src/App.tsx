@@ -49,7 +49,7 @@ function App() {
     fetchIncidents();
   }, [fetchIncidents]);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleCreate = async (e: import("react").FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!title.trim() || !service.trim()) return;
     try {
