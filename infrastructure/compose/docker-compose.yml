@@ -69,10 +69,8 @@ services:
       context: ../..
       dockerfile: apps/web/Dockerfile
     container_name: opsboard-web-1
-    depends_on:
-      - api-1
-      - api-2
-      - api-3
+    environment:
+      INSTANCE_ID: web-1
     networks:
       - frontend
     restart: unless-stopped
@@ -82,10 +80,8 @@ services:
       context: ../..
       dockerfile: apps/web/Dockerfile
     container_name: opsboard-web-2
-    depends_on:
-      - api-1
-      - api-2
-      - api-3
+    environment:
+      INSTANCE_ID: web-2
     networks:
       - frontend
     restart: unless-stopped
@@ -95,10 +91,8 @@ services:
       context: ../..
       dockerfile: apps/web/Dockerfile
     container_name: opsboard-web-3
-    depends_on:
-      - api-1
-      - api-2
-      - api-3
+    environment:
+      INSTANCE_ID: web-3
     networks:
       - frontend
     restart: unless-stopped

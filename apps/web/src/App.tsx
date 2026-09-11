@@ -32,6 +32,27 @@ function App() {
   const [service, setService] = useState("");
   const [severity, setSeverity] = useState<Incident["severity"]>("medium");
   const [error, setError] = useState<string | null>(null);
+  const [webInstance, setWebInstance] = useState<string | null>(null);
+  const [apiInstance, setApiInstance] = useState<string | null>(null);
+
+  const fetchInstances = useCallback(async () => {
+    try {
+      const res = await fetch("/instance.json");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.instance) setWebInstance(data.instance);
+      }
+    } catch {
+    }
+    try {
+      const res = await fetch("/health");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.instance) setApiInstance(data.instance);
+      }
+    } catch {
+    }
+  }, []);
 
   const fetchIncidents = useCallback(async () => {
     try {
@@ -43,7 +64,8 @@ function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error desconocido");
     }
-  }, []);
+    await fetchInstances();
+  }, [fetchInstances]);
 
   useEffect(() => {
     fetchIncidents();
@@ -98,6 +120,7 @@ function App() {
   return (
     <div className="app">
       <h1>OpsBoard</h1>
+      {webInstance && apiInstance && <span>{`Web ${webInstance} · API ${apiInstance}`}</span>}
 
       {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
 

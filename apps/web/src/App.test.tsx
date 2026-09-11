@@ -84,4 +84,19 @@ describe("App", () => {
       expect(deleteCall).toBeTruthy();
     });
   });
+
+  it("shows which web and api instances served the page", async () => {
+    fetchStub.mockImplementation((url: string) => {
+      if (url.includes("instance.json")) {
+        return Promise.resolve({ ok: true, json: async () => ({ instance: "web-2" }) });
+      }
+      if (url === "/health") {
+        return Promise.resolve({ ok: true, json: async () => ({ status: "ok", instance: "api-3" }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    render(<App />);
+    expect(await screen.findByText("Web web-2 · API api-3")).toBeTruthy();
+  });
 });
