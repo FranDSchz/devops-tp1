@@ -19,7 +19,7 @@ export async function incidentRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const incident = await getIncident(req.params.id);
       if (!incident) {
-        return reply.code(404).send({ error: "Incident not found" });
+        return reply.code(404).send({ error: "Incidente no encontrado" });
       }
       return reply.send(incident);
     }
@@ -47,7 +47,7 @@ export async function incidentRoutes(app: FastifyInstance): Promise<void> {
     "/api/incidents/:id",
     async (req, reply) => {
       const { title, service, severity, status } = req.body;
-      if (status) {
+      if (status !== undefined) {
         const validStatuses = [
           "open",
           "in_progress",
@@ -58,7 +58,7 @@ export async function incidentRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(400).send({ error: "Invalid status" });
         }
       }
-      if (severity) {
+      if (severity !== undefined) {
         const validSeverities = ["low", "medium", "high", "critical"];
         if (!validSeverities.includes(severity)) {
           return reply.code(400).send({ error: "Invalid severity" });
