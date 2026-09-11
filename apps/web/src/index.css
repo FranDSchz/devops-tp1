@@ -122,6 +122,14 @@ h1 {
   font-size: 0.95rem;
 }
 
+.api-state small {
+  margin-top: 8px;
+  color: #65738a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 main {
   display: grid;
   gap: 24px;

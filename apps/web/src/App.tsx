@@ -37,6 +37,27 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingIncidentId, setPendingIncidentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [webInstance, setWebInstance] = useState<string | null>(null);
+  const [apiInstance, setApiInstance] = useState<string | null>(null);
+
+  const fetchInstances = useCallback(async () => {
+    try {
+      const res = await fetch("/instance.json");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.instance) setWebInstance(data.instance);
+      }
+    } catch {
+    }
+    try {
+      const res = await fetch("/health");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.instance) setApiInstance(data.instance);
+      }
+    } catch {
+    }
+  }, []);
 
   const fetchIncidents = useCallback(async () => {
     setIsLoading(true);
@@ -48,7 +69,8 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+    await fetchInstances();
+  }, [fetchInstances]);
 
   useEffect(() => {
     void fetchIncidents();
@@ -143,6 +165,9 @@ function App() {
           <div className="api-state" title="La interfaz consume la API REST de OpsBoard">
             <span>Integración API</span>
             <strong>REST + Redis</strong>
+            {webInstance && apiInstance && (
+              <small>{`Web ${webInstance} · API ${apiInstance}`}</small>
+            )}
           </div>
         </div>
       </header>

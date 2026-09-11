@@ -23,7 +23,7 @@ beforeEach(() => {
 
 describe("OpsBoard", () => {
   it("loads incidents from the backend API and updates the summary", async () => {
-    fetchStub.mockResolvedValue(response([mockIncident]));
+    mockApiResponses(response([mockIncident]));
 
     render(<App />);
 
@@ -35,7 +35,7 @@ describe("OpsBoard", () => {
   });
 
   it("shows the empty state when the API has no incidents", async () => {
-    fetchStub.mockResolvedValue(response([]));
+    mockApiResponses(response([]));
 
     render(<App />);
 
@@ -50,9 +50,7 @@ describe("OpsBoard", () => {
       service: "gateway",
       severity: "critical",
     };
-    fetchStub
-      .mockResolvedValueOnce(response([]))
-      .mockResolvedValueOnce(response(createdIncident, 201));
+    mockApiResponses(response([]), response(createdIncident, 201));
 
     render(<App />);
     await screen.findByText("No hay incidentes registrados");
@@ -86,9 +84,7 @@ describe("OpsBoard", () => {
       status: "in_progress",
       updatedAt: "2026-01-01T12:05:00.000Z",
     };
-    fetchStub
-      .mockResolvedValueOnce(response([mockIncident]))
-      .mockResolvedValueOnce(response(updatedIncident));
+    mockApiResponses(response([mockIncident]), response(updatedIncident));
 
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Mover a En progreso" }));
@@ -104,9 +100,7 @@ describe("OpsBoard", () => {
   });
 
   it("deletes an incident from the API and the screen", async () => {
-    fetchStub
-      .mockResolvedValueOnce(response([mockIncident]))
-      .mockResolvedValueOnce(response(undefined, 204));
+    mockApiResponses(response([mockIncident]), response(undefined, 204));
 
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Eliminar Falla en pagos" }));
@@ -120,19 +114,45 @@ describe("OpsBoard", () => {
   });
 
   it("shows the backend error and can retry the request", async () => {
-    fetchStub
-      .mockResolvedValueOnce(response({ error: "Redis unavailable" }, 503))
-      .mockResolvedValueOnce(response([]));
+    mockApiResponses(response({ error: "Redis unavailable" }, 503), response([]));
 
     render(<App />);
 
     expect(await screen.findByText("Redis unavailable")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
 
-    await waitFor(() => expect(fetchStub).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(fetchStub.mock.calls.filter(([url]) => url === "/api/incidents")).toHaveLength(2);
+    });
     await waitFor(() => expect(screen.queryByText("Redis unavailable")).not.toBeInTheDocument());
   });
+
+  it("shows which web and api instances served the page", async () => {
+    fetchStub.mockImplementation((url: string) => {
+      if (url.includes("instance.json")) {
+        return Promise.resolve({ ok: true, json: async () => ({ instance: "web-2" }) });
+      }
+      if (url === "/health") {
+        return Promise.resolve({ ok: true, json: async () => ({ status: "ok", instance: "api-3" }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    render(<App />);
+    expect(await screen.findByText("Web web-2 · API api-3")).toBeTruthy();
+  });
 });
+
+function mockApiResponses(...responses: Response[]) {
+  let responseIndex = 0;
+  fetchStub.mockImplementation((url: string) => {
+    if (url === "/instance.json" || url === "/health") {
+      return Promise.resolve(response({}));
+    }
+
+    return Promise.resolve(responses[responseIndex++]);
+  });
+}
 
 function response(body: unknown, status = 200): Response {
   return {
