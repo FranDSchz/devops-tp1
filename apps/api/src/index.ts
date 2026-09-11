@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { fileURLToPath } from "node:url";
 import { incidentRoutes } from "./routes/incidents.js";
 import { closeRedis, getRedis } from "./store/redis.js";
 
@@ -33,11 +34,13 @@ export function buildApp() {
   return app;
 }
 
-const app = buildApp();
-
-const port = Number(process.env.PORT ?? 3000);
-
-if (!process.env.VITEST_WORKER_ID) {
+export async function startServer() {
+  const app = buildApp();
+  const port = Number(process.env.PORT ?? 3000);
+  process.on("SIGTERM", async () => {
+    await app.close();
+    await closeRedis();
+  });
   try {
     await app.listen({ port, host: "0.0.0.0" });
     app.log.info(`API running on port ${port} (instance ${INSTANCE_ID})`);
@@ -48,7 +51,6 @@ if (!process.env.VITEST_WORKER_ID) {
   }
 }
 
-process.on("SIGTERM", async () => {
-  await app.close();
-  await closeRedis();
-});
+if (fileURLToPath(import.meta.url) === process.argv[1]) {
+  await startServer();
+}

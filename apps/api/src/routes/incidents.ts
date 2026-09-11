@@ -36,7 +36,7 @@ export async function incidentRoutes(app: FastifyInstance): Promise<void> {
       }
       const validSeverities = ["low", "medium", "high", "critical"];
       if (!validSeverities.includes(severity)) {
-        return reply.code(400).send({ error: "Invalid severity" });
+        return reply.code(400).send({ error: "Severidad inválida" });
       }
       const incident = await createIncident({ title, service, severity });
       return reply.code(201).send(incident);
@@ -71,7 +71,7 @@ export async function incidentRoutes(app: FastifyInstance): Promise<void> {
         status,
       });
       if (!updated) {
-        return reply.code(404).send({ error: "Incident not found" });
+        return reply.code(404).send({ error: "Incidente no encontrado" });
       }
       return reply.send(updated);
     }
@@ -82,7 +82,7 @@ export async function incidentRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const deleted = await deleteIncident(req.params.id);
       if (!deleted) {
-        return reply.code(404).send({ error: "Incident not found" });
+        return reply.code(404).send({ error: "Incidente no encontrado" });
       }
       return reply.code(204).send();
     }
