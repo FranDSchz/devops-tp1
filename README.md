@@ -1,5 +1,7 @@
 # OpsBoard
 
+[![CI](https://github.com/FranDSchz/devops-tp1/actions/workflows/ci.yml/badge.svg)](https://github.com/FranDSchz/devops-tp1/actions/workflows/ci.yml)
+
 Trabajo Practico 1 de DevOps - UTN FRRe 2026.
 
 OpsBoard sera una aplicacion web sencilla para registrar y gestionar incidentes de servicios. El objetivo principal del proyecto no es construir un producto complejo, sino demostrar un flujo DevOps completo con contenedores, replicas, balanceo, CI, seguridad, publicacion de imagenes y despliegue en la nube.
@@ -158,6 +160,7 @@ Consultar [CONTRIBUTING.md](CONTRIBUTING.md) antes de comenzar una tarea.
 - [Arquitectura propuesta](docs/architecture.md)
 - [Decisiones del proyecto](docs/decisions.md)
 - [Roadmap](docs/roadmap.md)
+- [Estrategia y casos de pruebas unitarias](docs/tests.md)
 
 ## Entregables previstos
 
