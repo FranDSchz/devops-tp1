@@ -24,31 +24,41 @@ OpsBoard es una solución web contenerizada diseñada para la captura, visualiza
 
 El sistema está estructurado bajo un modelo de tres capas contenerizadas, orquestadas mediante Docker Compose y expuestas exclusivamente a través de un proxy inverso unificado.
 
-```text
-                                         RED DOCKER: frontend
-                                      +-------------------------+
-                                 +--> | opsboard-web-1 (React)  |
-                                 |    +-------------------------+
-                                 +--> | opsboard-web-2 (React)  |
-                                 |    +-------------------------+
-Cliente / Navegador              +--> | opsboard-web-3 (React)  |
-        |                        |    +-------------------------+
-        v                        |
-+-------------------+            |       RED DOCKER: backend
-|  opsboard-nginx   | (Puerto 80)|    +-------------------------+
-|  (Reverse Proxy   |------------+--> | opsboard-api-1 (Fastify)| --+
-|  & Load Balancer) |            |    +-------------------------+   |
-+-------------------+            +--> | opsboard-api-2 (Fastify)| --+--> [ opsboard-redis ]
-                                 |    +-------------------------+   |     (Redis 7 Alpine
-                                 +--> | opsboard-api-3 (Fastify)| --+     + Volumen Datos)
-                                      +-------------------------+
+```mermaid
+flowchart TD
+    Client["Cliente / Navegador Web"] -- "HTTP :8080 (Local) / :80 (Cloud)" --> NGINX["opsboard-nginx<br>(Reverse Proxy & Load Balancer)"]
+
+    subgraph NetFront["Red Docker: frontend (Aislada)"]
+        UP_WEB["upstream web_upstream<br>(Round-Robin)"]
+        W1["opsboard-web-1"]
+        W2["opsboard-web-2"]
+        W3["opsboard-web-3"]
+        UP_WEB --> W1 & W2 & W3
+    end
+
+    subgraph NetBack["Red Docker: backend (Privada)"]
+        UP_API["upstream api_upstream<br>(Round-Robin + Failover &lt;2s)"]
+        A1["opsboard-api-1 (:3000)"]
+        A2["opsboard-api-2 (:3000)"]
+        A3["opsboard-api-3 (:3000)"]
+        
+        REDIS[("opsboard-redis<br>(Redis 7 Alpine :6379)")]
+        VOL[("Volumen Persistente<br>redis-data -> /data")]
+        
+        UP_API --> A1 & A2 & A3
+        A1 & A2 & A3 -- "TCP :6379" --> REDIS
+        REDIS --- VOL
+    end
+
+    NGINX -- "Path / (Activos SPA)" --> UP_WEB
+    NGINX -- "Path /api/*, /health, /ready" --> UP_API
 ```
 
 ### Principios de Ingeniería Aplicados
-1. **Punto Único de Entrada y Mismo Origen:** Nginx actúa como fachada perimetral única (puerto `8080` local, `80/443` en la nube). Rutea los activos estáticos (`/`) hacia las instancias web y las peticiones transaccionales (`/api/`) hacia las instancias de API. Esto asegura que el cliente web consuma la API bajo el mismo origen, eliminando la necesidad de habilitar CORS y reduciendo la superficie de exposición.
-2. **Aislamiento de Red y Mínimo Privilegio:** Se configuran dos redes virtuales independientes (`frontend` y `backend`). La base de datos Redis reside exclusivamente en la red privada `backend`, sin mapeo de puertos hacia el host exterior y sin comunicación con los nodos web.
+1. **Punto Único de Entrada y Mismo Origen:** Nginx actúa como fachada perimetral única (puerto `8080` local, `80/443` en la nube). Al consolidar los activos estáticos (`/`) y las llamadas REST (`/api/`) bajo el mismo puerto perimetral expuesto por Nginx, el navegador aplica la **Same-Origin Policy** de forma transparente. Esto elimina el overhead de latencia de las peticiones pre-flight (`HTTP OPTIONS`), previene configuraciones permisivas inseguras (`Access-Control-Allow-Origin: *`) y neutraliza vectores de filtración de datos entre orígenes.
+2. **Aislamiento de Red, Dual-Homed Proxy y Mínimo Privilegio:** Se implementa el patrón **Dual-Homed Reverse Proxy** como mecanismo de **Defensa en Profundidad**: Nginx es el único contenedor con interfaces en ambas subredes (`frontend` y `backend`). Redis queda confinado en la subred privada `backend`, sin pasarela hacia el host (`ports` omitido deliberadamente) ni visibilidad desde los contenedores web, reduciendo la superficie de ataque perimetral al mínimo privilegio indispensable.
 3. **Servicios Stateless:** Los nodos de la API no conservan estado en memoria de proceso; cualquier réplica puede atender cualquier solicitud leyendo y escribiendo directamente en la capa de persistencia compartida.
-4. **Paridad de Entornos (Dev/Prod):** La arquitectura de red, enrutamiento y puertos se mantiene análoga entre el entorno de desarrollo local y el entorno de producción en la nube.
+4. **Paridad en Desarrollo/Producción (Twelve-Factor App):** Conforme al Factor X (Dev/Prod parity), los contenedores generados en local son idénticos a los desplegados en Cloud. Las variaciones de entorno se gestionan estrictamente mediante variables de entorno inyectadas en tiempo de ejecución (Factor III: Config), garantizando que las credenciales y parámetros de red no queden acoplados a la imagen inmutable.
 
 ---
 
@@ -59,7 +69,7 @@ Redis 7 Alpine opera como motor de persistencia estructurada, garantizando durab
 
 * **Modelado de Datos:**
   * **Entidades (`Hash`):** Cada incidente se persiste bajo la clave `incident:<uuid>` conteniendo atributos tipados: `id`, `title`, `service`, `severity`, `status`, `createdAt` y `updatedAt`.
-  * **Índice Global (`Set`):** Se utiliza la clave `incidents` de tipo Set para indexar los identificadores únicos, permitiendo consultas de colección eficientes sin recurrir a comandos bloqueantes (`KEYS`).
+  * **Índice Global (`Set`) y Eficiencia Algorítmica:** Se utiliza un Set (`incidents`) como índice secundario para listar identificadores en complejidad predecible ($O(N)$ sobre elementos del set con `SMEMBERS` o paginación segura con `SSCAN`), evitando el uso del comando antipatrón `KEYS *`, el cual es bloqueante ($O(\text{TotalClaves})$) y degradaría el event-loop monohilo de Redis en entornos concurrentes.
 * **Verificación de Persistencia mediante CLI:**
   ```bash
   # Conexión al contenedor
@@ -90,6 +100,33 @@ upstream api_upstream {
 * **Prueba de Resiliencia:** Ante la detención forzada de una instancia (`docker stop opsboard-api-2`), la directiva `proxy_next_upstream error timeout http_502;` redirige la petición en curso hacia un nodo sano en menos de 2 segundos. La aplicación web y las pruebas concurrentes registran 100% de respuestas exitosas (código HTTP 200), sin interrupción de servicio para el usuario final.
 
 ### 3.3. Integración Continua y Calidad de Código
+
+```mermaid
+flowchart LR
+    subgraph SCM["1. Control de Versiones (GitHub)"]
+        Dev["Desarrollador"] -->|Push / PR| Branch["Feature Branch"]
+        Branch --> PR["Pull Request"]
+    end
+
+    subgraph CI["2. Integración Continua (GitHub Actions)"]
+        PR --> QG1["TypeCheck<br>(tsc --noEmit)"]
+        QG1 --> QG2["Pruebas Unitarias<br>(Vitest)"]
+        QG2 --> QG3["Seguridad SAST/SCA<br>(Trivy Scan)"]
+    end
+
+    subgraph CD["3. Entrega & Registro (GHCR)"]
+        QG3 -- "Quality Gates OK + Aprobación" --> Merge["Merge a 'main'"]
+        Merge --> Build["docker build & tag"]
+        Build --> Push["docker push"]
+        Push --> Registry[("GitHub Container Registry<br>ghcr.io/.../opsboard-*")]
+    end
+
+    subgraph Prod["4. Despliegue en Cloud (Producción)"]
+        Registry -.->|"docker compose pull"| VM["Máquina Virtual (IaaS Ubuntu)<br>opsboard-cloud-stack"]
+        VM --> Live["Servicio Operativo en Internet<br>http://IP_PUBLICA:80"]
+    end
+```
+
 * **Verificación Estática:** Comprobación estricta de tipos mediante TypeScript (`tsc --noEmit`), reportando 0 errores en los paquetes `apps/api` y `apps/web`.
 * **Pruebas Unitarias:** Suite implementada con Vitest:
   * Frontend: 7 pruebas unitarias aprobadas que validan renderizado reactivo, carga asincrónica y manejo de estados.
