@@ -140,91 +140,40 @@ for i in {1..6}; do curl -s http://localhost:8080/whoami; echo ""; done
 
 ## 5. Pipeline de CI/CD y Seguridad (Rúbrica: 10 pts CI/SAST + 20 pts GHCR)
 
-El flujo de integración continua está implementado sobre **GitHub Actions**, garantizando la calidad, seguridad y reproducibilidad antes de fusionar código en `main`.
+> ⚠️ **Estado de cumplimiento:**
+> - **Pruebas y scripts en el monorepo:** IMPLEMENTADOS (`npm run test`, `npm run typecheck`, `npm run build`). Verificados localmente: Web 7/7 tests pass, Typecheck 100% pass, API 7 pass + 1 falla temporal preexistente conocida en `incidents.test.ts:165`.
+> - **Workflows en GitHub Actions:** `[PENDIENTE - ASIGNADO A LAUTARO #9, #10, #11]`. Al 13/09/2026 no existen archivos bajo `.github/workflows/` ni ejecuciones registradas en GitHub Actions (sólo automatizaciones de Copilot).
+> - **Badges de CI y Seguridad:** `[PENDIENTE - ASIGNADO A LAUTARO]`. Se incorporarán al `README.md` una vez que los workflows correspondientes se ejecuten con éxito.
 
-### Etapas del Pipeline
-1. **Validación y Pruebas Unitarias:**
+### Estructura Planificada del Pipeline
+1. **Validación y Pruebas Unitarias (Issue #9):**
    * Instalación determinista mediante `npm ci`.
    * Verificación de tipos TypeScript (`npm run typecheck`).
    * Ejecución de pruebas unitarias con Vitest para API (`apps/api`) y Frontend (`apps/web`).
-2. **Análisis Estático SAST (CodeQL):**
-   * Escaneo semántico del código fuente TypeScript/JavaScript para detectar vulnerabilidades comunes (inyecciones, manejo inseguro de datos).
-3. **Escaneo SCA y Detección de Secretos (Trivy):**
-   * Auditoría de dependencias en `package-lock.json` reportando CVEs.
-   * Escaneo estático en busca de claves privadas, tokens o credenciales filtradas accidentalmente.
-4. **Publicación en Container Registry (GHCR):**
-   * Construcción de imágenes Docker multi-stage optimizadas para `web` y `api`.
-   * Publicación automática en GitHub Container Registry bajo etiquetas semánticas y el commit SHA:
+2. **Análisis Estático SAST y Seguridad (Issue #10):**
+   * CodeQL o herramienta aprobada por el equipo (ej. evaluación de Aikido) para SAST.
+   * Trivy para escaneo de dependencias (SCA) y detección de secretos.
+3. **Publicación en Container Registry (Issue #11):**
+   * Construcción y publicación de imágenes Docker para `web` y `api` en GitHub Container Registry:
      * `ghcr.io/frandschz/opsboard-web:latest`
      * `ghcr.io/frandschz/opsboard-api:latest`
-
-### Badges en README.md
-El estado del proyecto se monitorea públicamente a través de los badges oficiales en la raíz del repositorio:
-* Badge de estado de CI (Build & Tests).
-* Badge de resultados de análisis de seguridad (CodeQL / Trivy).
 
 ---
 
 ## 6. Despliegue Cloud desde el Registry (Rúbrica: 20 Puntos)
 
-### Estrategia de Despliegue
-En cumplimiento de la consigna oficial (*"deployar en un servicio cloud desde una Registry de imágenes... al menos una instancia funcional publicada desde el registro"*), se utiliza una instancia virtual Cloud (IaaS) con Docker y Compose instalados.
+> ⚠️ **Estado de cumplimiento:**
+> - **Preparación de infraestructura cloud:** IMPLEMENTADA Y VALIDADA (`infrastructure/compose/docker-compose.cloud.yml` y `infrastructure/nginx/nginx.cloud.conf` verificados con `docker compose config`).
+> - **Procedimiento de despliegue en VM:** DOCUMENTADO en [`docs/cloud-deployment.md`](cloud-deployment.md).
+> - **Despliegue real en vivo con URL pública:** `[BLOQUEADO - PENDIENTE DE IMÁGENES EN GHCR #11 Y APROVISIONAMIENTO DE VM]`.
+> - En estricto cumplimiento de la consigna, la Issue #12 no se dará por cumplida hasta que el stack corra consumiendo imágenes remotas de GHCR y se verifique la URL pública. Un despliegue local o construido desde código sólo tiene fines de diagnóstico.
 
-### Manifiesto de Despliegue (`docker-compose.cloud.yml`)
-En producción no se compilan imágenes en el servidor. El stack se ejecuta consumiendo exclusivamente los artefactos publicados en GHCR:
-
-```yaml
-services:
-  redis:
-    image: redis:7-alpine
-    restart: always
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis_cloud_data:/data
-    networks:
-      - opsboard_net
-
-  api:
-    image: ghcr.io/frandschz/opsboard-api:latest
-    restart: always
-    environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      PORT: 3000
-    depends_on:
-      - redis
-    networks:
-      - opsboard_net
-
-  web:
-    image: ghcr.io/frandschz/opsboard-web:latest
-    restart: always
-    networks:
-      - opsboard_net
-
-  nginx:
-    image: nginx:alpine
-    restart: always
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.cloud.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - api
-      - web
-    networks:
-      - opsboard_net
-
-volumes:
-  redis_cloud_data:
-
-networks:
-  opsboard_net:
-```
-
-### Ventajas de la Alternativa Elegida
-* **Respuesta Inmediata en el Coloquio:** A diferencia de los planes gratuitos PaaS (como Render o Koyeb) que suspenden los contenedores tras 15 minutos de inactividad provocando demoras de 1 a 2 minutos ("cold starts"), la VM garantiza disponibilidad 24/7 y respuesta en milisegundos.
-* **Consistencia de Red:** El reverse proxy unificado Nginx expone el puerto estándar HTTP/HTTPS, eliminando problemas de CORS entre orígenes distintos.
+### Manifiesto de Despliegue Cloud (`docker-compose.cloud.yml`)
+En la máquina virtual de producción el stack consume exclusivamente artefactos publicados:
+* `web`: `ghcr.io/frandschz/opsboard-web:latest` (con `INSTANCE_ID: web-cloud-1`).
+* `api`: `ghcr.io/frandschz/opsboard-api:latest` (con `INSTANCE_ID: api-cloud-1` y healthcheck en `/health`).
+* `redis`: `redis:7-alpine` con volumen persistente `redis-cloud-data`.
+* `nginx`: `nginx:alpine` enrutando `/`, `/api/`, `/health`, `/ready` y `/whoami` por el puerto 80 sin problemas de CORS.
 
 ---
 
@@ -236,11 +185,14 @@ Durante el ciclo de desarrollo se resolvieron desafíos técnicos relevantes:
    * *Problema:* Los contenedores necesitaban resolver las dependencias compartidas del monorepo (`package.json` raíz y `tsconfig.base.json`) sin copiar archivos innecesarios ni romper la caché de capas de Docker.
    * *Solución:* Se implementaron Dockerfiles multi-stage con contexto en la raíz del repositorio, copiando únicamente los manifiestos indispensables en la etapa de build (`npm ci --workspace=...`) y generando artefactos limpios para la etapa de runtime.
 2. **Sensibilidad Temporal en Tests de Integración:**
-   * *Problema:* En pruebas concurrentes de creación y actualización de incidentes, las marcas temporales `createdAt` y `updatedAt` podían coincidir dentro del mismo milisegundo, provocando aserciones erráticas en Vitest.
-   * *Solución:* Se ajustaron las aserciones del store para verificar consistencia lógica (`updatedAt >= createdAt`) evitando acoplamientos rígidos al reloj del sistema.
-3. **Autenticación y Visibilidad en GHCR:**
-   * *Problema:* Las imágenes publicadas en GitHub Packages nacen como privadas por defecto en ciertas configuraciones de organización, requiriendo autenticación manual para hacer `docker pull` desde la nube.
-   * *Solución:* Se configuró la visibilidad del paquete como pública dentro de GitHub Packages, permitiendo despliegues limpios en servidores externos sin exponer tokens personales.
+   * *Problema:* En `apps/api/src/store/incidents.test.ts:165`, en ejecuciones rápidas las marcas temporales `createdAt` y `updatedAt` coinciden dentro del mismo milisegundo provocando una falla de aserción estricta (`not.toBe`).
+   * *Diagnóstico:* Identificado y documentado como comportamiento preexistente en `docs/evidencia-m2.md`. Requiere flexibilizar la comprobación a consistencia lógica (`updatedAt >= createdAt`).
+3. **Identificación de Instancias en Frontend y Proxy:**
+   * *Problema:* Se requería mostrar qué réplica atendía el frontend y cuál el backend sin colisiones de ruteo.
+   * *Solución:* En PR #17 se implementó `/instance.json` generado dinámicamente al arranque del contenedor web y `/health` / `/ready` en la API, con Nginx configurado con `proxy_pass_header X-Instance-ID` y failover con `proxy_next_upstream`.
+4. **Dependencia Externa de Registry para Cloud:**
+   * *Problema:* No es posible validar el despliegue final de Cloud sin las imágenes preconstruidas en GHCR.
+   * *Solución:* Se desacopló la validación estática de infraestructura (compose y proxy verificados sintácticamente) del despliegue real, dejando el procedimiento listo en `docs/cloud-deployment.md` a la espera de las imágenes.
 
 ---
 
@@ -250,21 +202,22 @@ Para un entorno productivo de mayor escala, se proyectan las siguientes extensio
 1. **Alta Disponibilidad de Almacenamiento:** Implementación de Redis Sentinel o Redis Cluster con replicación primaria/secundaria y failover automático.
 2. **Entrega Continua con GitOps:** Incorporación de herramientas como Watchtower o ArgoCD para automatizar el ciclo de actualización de contenedores en la nube ante un nuevo tag publicado en GHCR.
 3. **Observabilidad Integral:** Integración de exportadores de métricas para Prometheus, paneles de visualización en Grafana y centralización de logs estructurados con Grafana Loki o el stack ELK.
-4. **Seguridad Perimetral:** Aprovisionamiento automático de certificados SSL/TLS mediante Let's Encrypt y Certbot montado como contenedor sidecar en Nginx.
+4. **Seguridad Perimetral y TLS:** Aprovisionamiento automático de certificados SSL/TLS mediante Let's Encrypt y Certbot montado como contenedor sidecar en Nginx.
 
 ---
 
 ## 9. Matriz de Cumplimiento de la Rúbrica Oficial (100 Puntos)
 
-| Criterio Oficial de la Rúbrica | Puntaje | Estado | Evidencia Concreta en el Repositorio |
-| :--- | :---: | :---: | :--- |
-| **Apps Funcionando (Local y Nube)** | 30 | Cumplido | Monorepo funcional con Web SPA (React) y API REST (Fastify) comunicadas e integradas. |
-| **Visualización de Variables en Redis** | 10 | Cumplido | Procedimiento interactivo con `redis-cli` (`SMEMBERS`, `HGETALL`) documentado y reproducible. |
-| **GitHub Actions publicando en Registry** | 20 | Cumplido | Pipeline `.github/workflows/publish.yml` construyendo y subiendo imágenes a GHCR. |
-| **CI (Pruebas unitarias y SAST/SCA)** | 10 | Cumplido | Workflows de CI con Vitest, CodeQL y Trivy; badges visibles en el README. |
-| **App funcionando en servicio Cloud** | 20 | Cumplido | Instancia Cloud operativa ejecutando el stack desde las imágenes públicas de GHCR. |
-| **Coloquio y Presentación** | 10 | Cumplido | Informe técnico consolidado (`docs/report.md`) y guion de demostración cronometrado. |
-| **TOTAL** | **100** | — | — |
+| Criterio Oficial | Puntos | Estado | Implementación / Evidencia Técnica | Responsable |
+| :--- | :---: | :---: | :--- | :--- |
+| **Apps Funcionando (Local)** | 30 | **VERIFICADO** | Monorepo funcional con Web SPA (React), API REST (Fastify) y Redis. Verificado en local (evidencia en `docs/evidencia-m2.md` y suite de pruebas unitarias). | Celeste (Backend), Philippe (Frontend), Mariano (Infra) |
+| **Visualización en Redis** | 10 | **VERIFICADO** | Procedimiento reproducible interactivo con `redis-cli` (`SMEMBERS`, `HGETALL`) documentado en `docs/cheatsheet-redis.md` y verificado en `docs/evidencia-m2.md`. | Celeste / Mariano |
+| **Balanceo y Tolerancia a Fallos** | Pauta | **VERIFICADO** | 3 nodos Web y 3 nodos API con Nginx Round-Robin, header `X-Instance-ID` y failover automático probado ante detención de contenedor (`docker stop opsboard-api-2`). Evidencia en `docs/evidencia-m2.md`. | Mariano |
+| **GitHub Actions en Registry** | 20 | **BLOQUEADO** | Pipeline de build y push a GHCR no implementado en `.github/workflows/`. Requiere publicación de imágenes `opsboard-web` y `opsboard-api`. | Lautaro (Issue #11) |
+| **CI (Tests y SAST/SCA)** | 10 | **PENDIENTE** | Pruebas unitarias implementadas en código, pero falta workflow de GitHub Actions (`ci.yml`) y SAST/SCA (CodeQL/Trivy o Aikido) con badges en README. | Lautaro (Issues #9 y #10) |
+| **App en Cloud (desde Registry)** | 20 | **BLOQUEADO** | Configuración de Compose y Nginx cloud lista (`infrastructure/compose/docker-compose.cloud.yml`). Despliegue real pendiente de imágenes en GHCR y de aprovisionamiento de VM con URL pública. | Franco (Issue #12) |
+| **Coloquio y Presentación** | 10 | **IMPLEMENTADO** | Informe técnico consolidado (`docs/report.md`), matriz de trazabilidad y guion de demostración cronometrado para los 5 integrantes. | Franco (Issue #13) |
+| **TOTAL** | **100** | — | — | — |
 
 ---
 
@@ -273,19 +226,19 @@ Para un entorno productivo de mayor escala, se proyectan las siguientes extensio
 Para asegurar la defensa coordinada y la evaluación personal exigida por la cátedra, la presentación se estructura en 5 bloques cronometrados:
 
 * **00:00 - 02:00 | Celeste (Backend y Modelo de Datos):**
-  * Presenta la API Fastify y el diseño del almacenamiento en Redis.
-  * Abre terminal y ejecuta en vivo `docker exec -it opsboard-redis redis-cli`, mostrando con `HGETALL` cómo persisten los incidentes.
+  * Presenta la API Fastify y el diseño del almacenamiento en Redis (Hashes y Set índice).
+  * Abre terminal y ejecuta en vivo `docker exec -it opsboard-redis redis-cli`, mostrando con `SMEMBERS incidents` y `HGETALL incident:<uuid>` cómo persisten los datos.
 * **02:00 - 04:00 | Philippe (Frontend y Experiencia de Usuario):**
-  * Muestra la interfaz de OpsBoard en el navegador.
-  * Crea un incidente, actualiza su estado a `resolved` y demuestra la reactividad de la interfaz consumiendo `/api`.
+  * Muestra la interfaz de OpsBoard en el navegador (<http://localhost:8080>).
+  * Crea un incidente, actualiza su estado y muestra el badge de instancias que consulta `/instance.json` y `/health`.
 * **04:00 - 06:30 | Mariano (Infraestructura, Balanceo y Tolerancia a Fallos):**
-  * Explica la composición local de Docker Compose y la configuración de Nginx.
+  * Explica la composición local de Docker Compose (3 web + 3 api + Nginx + Redis).
   * Ejecuta el script de peticiones mostrando la rotación de `X-Instance-ID` entre `api-1`, `api-2` y `api-3`.
-  * Ejecuta `docker stop opsboard-api-2` y demuestra que la web sigue respondiendo sin error.
+  * Ejecuta `docker stop opsboard-api-2` y demuestra que la web sigue respondiendo sin error 502 gracias a `proxy_next_upstream`.
 * **06:30 - 09:00 | Lautaro (CI/CD, Seguridad y Registry):**
-  * Recorre los workflows de GitHub Actions (Vitest, CodeQL, Trivy).
+  * Recorre los workflows de GitHub Actions (Vitest, análisis SAST y escaneo de secretos).
   * Muestra los badges verdes en el README y la sección de Packages en GitHub con las imágenes subidas a GHCR.
 * **09:00 - 11:30 | Franco (Despliegue Cloud y Cierre):**
   * Presenta la solución desplegada en la nube accediendo a la URL pública.
   * Muestra en los logs del servidor cloud que el stack corre a partir de `docker pull ghcr.io/...`.
-  * Sintetiza las dificultades resueltas y conclusiones del trabajo.
+  * Sintetiza las dificultades resueltas, la matriz de cumplimiento y las mejoras futuras documentadas en el informe técnico.
