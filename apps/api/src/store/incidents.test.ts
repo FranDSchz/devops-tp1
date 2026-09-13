@@ -157,6 +157,9 @@ describe("incident store (with mocked redis)", () => {
   it("updates only provided fields", async () => {
     const created = await createIncident({ title: "Original", service: "api", severity: "low" });
 
+    // Wait at least 10ms to ensure the ISO timestamp advances
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     const updated = await updateIncident(created.id, { status: "in_progress" });
     expect(updated?.status).toBe("in_progress");
     expect(updated?.title).toBe("Original");
