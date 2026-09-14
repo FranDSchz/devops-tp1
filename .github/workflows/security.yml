@@ -41,14 +41,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
       - name: Run Trivy SCA vulnerability scanner (Dependencies)
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: "fs"
-          scan-ref: "."
-          format: "sarif"
-          output: "trivy-sca-results.sarif"
-          severity: "CRITICAL,HIGH"
+        run: |
+          trivy fs --format sarif --output trivy-sca-results.sarif --severity CRITICAL,HIGH .
 
       - name: Upload Trivy SCA SARIF report
         uses: github/codeql-action/upload-sarif@v3
@@ -58,10 +57,5 @@ jobs:
           category: "trivy-sca"
 
       - name: Run Trivy Secret Scanner
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: "fs"
-          scan-ref: "."
-          security-checks: "secret"
-          format: "table"
-          exit-code: "0"
+        run: |
+          trivy fs --scanners secret --exit-code 0 .
