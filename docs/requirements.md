@@ -42,7 +42,7 @@ Este archivo no reemplaza a la consigna oficial. Ante una diferencia, prevalece 
 | SAST | CodeQL |
 | SCA y Secrets | Trivy |
 | Registry | GHCR |
-| Cloud | Render como primera opcion |
+| Cloud | AWS EC2 (Ubuntu 24.04 LTS en t3.micro) con Docker Compose y GHCR |
 
 ## Entregables
 

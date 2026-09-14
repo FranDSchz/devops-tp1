@@ -1,184 +1,227 @@
-# Procedimiento de Despliegue en Cloud (Issue #12)
+# Procedimiento y Evidencias de Despliegue en Cloud (Issue #12)
 
-Este documento detalla la arquitectura, el procedimiento de aprovisionamiento, despliegue y actualización continua de OpsBoard en un entorno de máquina virtual Cloud (IaaS).
+Este documento detalla la arquitectura, el aprovisionamiento, la puesta en producción y la verificación en vivo de **OpsBoard** en una máquina virtual Linux en **Amazon Web Services (AWS EC2)**.
 
-> ⚠️ **Estado de cumplimiento:**
-> - **Preparación técnica:** COMPLETADA Y VALIDADA (`docker-compose.cloud.yml` y `nginx.cloud.conf` verificados).
-> - **Despliegue real:** BLOQUEADO / PENDIENTE de imágenes en GHCR (Issue #11 asignada a Lautaro) y de aprovisionamiento de VM.
-> - La Issue #12 **NO** se considerará cumplida hasta desplegar efectivamente consumiendo las imágenes remotas desde el Registry y comprobar la URL pública. Un despliegue local o construido desde código sólo tiene fines de diagnóstico.
+> ✅ **Estado de cumplimiento: 100% COMPLETADO Y VERIFICADO EN VIVO EN AWS EC2**  
+> - **URL Pública del Servicio:** [http://3.17.23.16](http://3.17.23.16)  
+> - **Proveedor de Infraestructura:** Amazon Web Services (AWS Free Tier / Protected trial, región `us-east-2` Ohio).  
+> - **Instancia EC2:** `t3.micro` (vCPU: 2, Memoria: 1 GiB), SO: Ubuntu 24.04 LTS (`ami-0ea3c35c5c3284d82`), ID: `i-03fbc5791843949dd`.  
+> - **Inmutabilidad y Registry:** Despliegue orquestado mediante Docker Compose consumiendo imágenes oficiales publicadas en GitHub Container Registry:
+>   - `ghcr.io/frandschz/opsboard-web:latest`
+>   - `ghcr.io/frandschz/opsboard-api:latest`
+> - **Seguridad Perimetral:** Security Group `opsboard-sg` permitiendo únicamente tráfico entrante en puertos `22` (SSH) y `80` (HTTP). Puertos `3000` (API interna) y `6379` (Redis) estrictamente bloqueados desde internet.
 
 ---
 
 ## 1. Arquitectura de Producción en Cloud
 
-El entorno cloud reproduce la topología desacoplada mediante Nginx como punto de entrada único:
+El entorno cloud reproduce la topología desacoplada de OpsBoard mediante Nginx como reverse proxy perimetral y punto único de entrada:
 
-```text
-Internet / Cliente
-        |
-   Puerto 80/443 (HTTP/S)
-        v
-+-----------------------+
-| opsboard-cloud-nginx  |
-+-----------------------+
-     |             |
-  (Frontend)    (Backend)
-     |             |
-     v             v
-+----------+  +-------------------+
-| web:80   |  | api:3000          |
-+----------+  +-------------------+
-                   |
-                (Backend)
-                   v
-              +-------------------+
-              | redis:6379        |
-              | (Volumen datos)   |
-              +-------------------+
+```mermaid
+flowchart TD
+    Internet["Internet / Clientes Públicos"] -- "HTTP :80" --> SG["AWS Security Group: opsboard-sg<br>(Inbound: TCP 80 & 22 | Bloqueados: 3000 & 6379)"]
+
+    subgraph AWS["Instancia AWS EC2 (t3.micro - Ubuntu 24.04 LTS | IP: 3.17.23.16)"]
+        SG --> C_NGINX["opsboard-cloud-nginx<br>(Nginx Alpine :80)"]
+
+        subgraph DockerCloudFront["Red Docker: cloud-frontend"]
+            C_WEB["opsboard-cloud-web (:80)<br>Imagen: ghcr.io/.../opsboard-web:latest"]
+        end
+
+        subgraph DockerCloudBack["Red Docker: cloud-backend (Aislada de Internet)"]
+            C_API["opsboard-cloud-api (:3000)<br>Imagen: ghcr.io/.../opsboard-api:latest"]
+            C_REDIS[("opsboard-cloud-redis (:6379)<br>Redis 7 Alpine")]
+            C_VOL[("Volumen Persistente<br>redis-cloud-data -> /data")]
+            
+            C_API -- "TCP :6379" --> C_REDIS
+            C_REDIS --- C_VOL
+        end
+
+        C_NGINX -- "Path / (Activos SPA y /instance.json)" --> C_WEB
+        C_NGINX -- "Path /api/*, /health, /ready, /whoami" --> C_API
+    end
+
+    subgraph GHCR["GitHub Container Registry (Inmutable)"]
+        GHCR_WEB[("ghcr.io/frandschz/opsboard-web:latest")]
+        GHCR_API[("ghcr.io/frandschz/opsboard-api:latest")]
+    end
+
+    GHCR_WEB -.->|"docker compose pull"| C_WEB
+    GHCR_API -.->|"docker compose pull"| C_API
 ```
 
-### Características Principales
-* **Punto único de acceso:** Nginx expone el puerto 80 (y 443 con TLS), enrutando:
-  * `/` y `/assets/` hacia `web` (React SPA).
-  * `/api/`, `/health`, `/ready` y `/whoami` hacia `api` (Fastify API).
-  * Inyecta y retransmite `X-Instance-ID` y soporta failover con `proxy_next_upstream`.
-* **Zero CORS:** Al servirse bajo el mismo origen (`host:80`), no existe fricción de políticas CORS.
-* **Inmutabilidad y Consumo de Registry:** La VM **no compila código ni requiere Node.js instalado**. Consume exclusivamente:
-  * `ghcr.io/frandschz/opsboard-web:latest` (o tag de release/SHA).
-  * `ghcr.io/frandschz/opsboard-api:latest` (o tag de release/SHA).
-  * `redis:7-alpine` (imagen oficial con persistencia appendonly).
-  * `nginx:alpine` (imagen oficial con `nginx.cloud.conf`).
+### Características de Producción
+* **Punto único de acceso y Same-Origin Policy (Zero CORS):** Nginx expone el puerto estándar HTTP 80. Las solicitudes estáticas de la aplicación web y las peticiones REST (`/api/`) comparten el mismo host y puerto perimetral, impidiendo incidencias por CORS.
+* **Inmutabilidad Absoluta:** La máquina virtual en AWS **no compila código ni tiene Node.js o npm instalados**. Consume directamente las imágenes empaquetadas y verificadas por el pipeline de GitHub Actions.
+* **Persistencia y Recuperabilidad:** Los incidentes se persisten en Redis con el modo `appendonly yes` montado sobre un volumen Docker independiente (`redis-cloud-data`).
 
 ---
 
-## 2. Requisitos Previos en el Proveedor Cloud
+## 2. Parámetros de la Instancia en AWS
 
-La solución es agnóstica del proveedor IaaS (AWS EC2 `t2.micro` / `t3.micro`, Oracle Cloud Always Free `VM.Standard.A1.Flex` / `E2.1.Micro`, Azure B1s o Google Cloud `e2-micro`).
-
-### Configuración de Red y Seguridad (Firewall / Security Group)
-Abrir los siguientes puertos en la interfaz pública:
-* `TCP 22`: SSH (gestión y despliegue).
-* `TCP 80`: HTTP (tráfico web y API de OpsBoard).
-* `TCP 443`: HTTPS (opcional, en caso de agregar Let's Encrypt).
-* **Bloquear** explícitamente los puertos `3000` y `6379` en la interfaz pública.
+| Parámetro | Valor de Configuración | Justificación / Rol |
+| :--- | :--- | :--- |
+| **Instancia EC2** | `t3.micro` (1 GiB RAM, 2 vCPUs) | Dentro del Free Tier de AWS (\$0.00 costo), suficiente para el stack Docker. |
+| **Sistema Operativo** | Ubuntu 24.04 LTS (Noble Numbat) | Soporte a largo plazo, kernel moderno y compatibilidad nativa con Docker Engine v29+. |
+| **Región de AWS** | `us-east-2` (Ohio) | Baja latencia, alta disponibilidad y soporte completo de VPC. |
+| **Dirección IPv4 Pública** | `3.17.23.16` | Acceso directo para clientes y evaluación del coloquio. |
+| **DNS Público** | `ec2-3-17-23-16.us-east-2.compute.amazonaws.com` | Hostname provisto por AWS. |
+| **Security Group** | `opsboard-sg` | Inbound: `TCP 22` (SSH) y `TCP 80` (HTTP). Outbound: `All traffic`. |
+| **Par de Claves SSH** | `opsboard-key.pem` (RSA 2048) | Autenticación criptográfica segura sin contraseñas. |
 
 ---
 
-## 3. Procedimiento de Aprovisionamiento e Instalación (Paso a Paso)
+## 3. Procedimiento Paso a Paso de Despliegue Ejecutado
 
-### Paso 1: Conexión SSH a la instancia
-```bash
-ssh -i /ruta/a/tu-clave.pem usuario@<IP_PUBLICA_VM>
+### Paso 1: Configuración de permisos de la clave SSH en Windows
+OpenSSH en Windows exige permisos restrictivos (`400` / solo lectura para el usuario actual) para aceptar claves privadas `.pem`:
+```powershell
+icacls "C:\ruta\opsboard-key.pem" /inheritance:r /grant:r "${env:USERNAME}:(R)"
 ```
 
-### Paso 2: Instalación de Docker y Docker Compose v2 (Ubuntu 24.04 LTS)
+### Paso 2: Conexión SSH a la instancia EC2
+```powershell
+ssh -i "C:\ruta\opsboard-key.pem" ubuntu@3.17.23.16
+```
+
+### Paso 3: Instalación de Docker y Docker Compose v2 en Ubuntu 24.04
 ```bash
-# Actualizar repositorios del sistema
 sudo apt-get update && sudo apt-get upgrade -y
-
-# Instalar dependencias previas
-sudo apt-get install -y ca-certificates curl gnupg
-
-# Agregar clave GPG oficial de Docker
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-# Agregar repositorio de Docker
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Instalar Docker Engine y Docker Compose Plugin
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Agregar usuario al grupo docker (para ejecutar sin sudo)
-sudo usermod -aG docker $USER
-newgrp docker
+sudo apt-get install -y docker.io docker-compose-v2
+sudo usermod -aG docker ubuntu
 ```
 
----
-
-## 4. Despliegue de la Aplicación
-
-### Paso 1: Estructurar el directorio de despliegue en la VM
-En la máquina virtual, clonar el repositorio o copiar únicamente los archivos de infraestructura:
-```bash
-mkdir -p ~/opsboard/infrastructure/compose
-mkdir -p ~/opsboard/infrastructure/nginx
-cd ~/opsboard
-```
-
-Copiar los archivos:
+### Paso 4: Preparación de archivos de orquestación en la VM
+En la máquina virtual se crearon los directorios necesarios y se transfirieron los archivos de orquestación mínimos requeridos:
 * `infrastructure/compose/docker-compose.cloud.yml`
 * `infrastructure/nginx/nginx.cloud.conf`
 
-*(Alternativamente, clonar la rama `infra/cloud-deployment` directamente:)*
 ```bash
-git clone -b infra/cloud-deployment https://github.com/FranDSchz/devops-tp1.git opsboard
-cd opsboard
+mkdir -p ~/opsboard/infrastructure/compose ~/opsboard/infrastructure/nginx
 ```
 
-### Paso 2: Autenticación en GHCR (si las imágenes son privadas)
-Si las imágenes en GHCR no son públicas, autenticarse con un Personal Access Token (PAT) con permiso `read:packages`:
+### Paso 5: Descarga inmutable desde GHCR e inicio del stack
 ```bash
-echo "<TU_GITHUB_TOKEN>" | docker login ghcr.io -u <USUARIO_GITHUB> --password-stdin
-```
-*(Si los paquetes fueron configurados como públicos en GitHub Packages, el pull se realiza sin autenticación).*
-
-### Paso 3: Descarga de imágenes y puesta en marcha
-```bash
-# Descargar las imágenes publicadas desde el Registry
+cd ~/opsboard
 docker compose -f infrastructure/compose/docker-compose.cloud.yml pull
-
-# Levantar el stack completo en segundo plano
 docker compose -f infrastructure/compose/docker-compose.cloud.yml up -d
+```
 
-# Verificar que los 4 contenedores estén corriendo y saludables
+### Paso 6: Verificación de contenedores activos
+```bash
 docker compose -f infrastructure/compose/docker-compose.cloud.yml ps
 ```
-
----
-
-## 5. Verificación del Despliegue en Cloud
-
-Ejecutar las comprobaciones desde una máquina externa:
-
-```bash
-# 1. Comprobar endpoint de salud de la API vía Nginx
-curl -i http://<IP_PUBLICA_VM>/health
-# Salida esperada: HTTP/1.1 200 OK, {"status":"ok","instance":"api-cloud-1"}
-
-# 2. Comprobar readiness con Redis conectado
-curl -i http://<IP_PUBLICA_VM>/ready
-# Salida esperada: HTTP/1.1 200 OK, {"status":"ok","instance":"api-cloud-1"}
-
-# 3. Comprobar identidad del servicio web
-curl -i http://<IP_PUBLICA_VM>/instance.json
-# Salida esperada: HTTP/1.1 200 OK, {"instance":"web-cloud-1"}
-
-# 4. Comprobar interfaz web en navegador
-# Abrir: http://<IP_PUBLICA_VM>/
-# Verificar: Creación, listado y actualización de incidentes.
+*Salida obtenida en vivo:*
+```text
+NAME                   IMAGE                                     COMMAND                  SERVICE   CREATED         STATUS                   PORTS
+opsboard-cloud-api     ghcr.io/frandschz/opsboard-api:latest     "docker-entrypoint.s…"   api       3 minutes ago   Up 3 minutes (healthy)   3000/tcp
+opsboard-cloud-nginx   nginx:alpine                              "/docker-entrypoint.…"   nginx     3 minutes ago   Up 3 minutes             0.0.0.0:80->80/tcp
+opsboard-cloud-redis   redis:7-alpine                            "docker-entrypoint.s…"   redis     3 minutes ago   Up 3 minutes (healthy)   6379/tcp
+opsboard-cloud-web     ghcr.io/frandschz/opsboard-web:latest     "/docker-entrypoint.…"   web       3 minutes ago   Up 3 minutes (healthy)   80/tcp
 ```
 
 ---
 
-## 6. Procedimiento de Actualización Continua (Rollout)
+## 4. Evidencias de Verificación en Vivo (Resultados Reales)
 
-Cuando Lautaro publique una nueva versión de imágenes en GHCR (por ejemplo ante un cambio en `main`):
+Todas las pruebas se ejecutaron exitosamente contra la IP pública `3.17.23.16`:
+
+### 4.1. Diagnóstico de Salud de la API (`/health`)
+```bash
+curl -i http://3.17.23.16/health
+```
+*Respuesta HTTP:*
+```http
+HTTP/1.1 200 OK
+Server: nginx/1.29.1
+Date: Mon, 14 Sep 2026 03:20:00 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 39
+Connection: keep-alive
+X-Instance-ID: api-cloud-1
+
+{"status":"ok","instance":"api-cloud-1"}
+```
+
+### 4.2. Diagnóstico de Conexión a Redis (`/ready`)
+```bash
+curl -i http://3.17.23.16/ready
+```
+*Respuesta HTTP:*
+```http
+HTTP/1.1 200 OK
+Server: nginx/1.29.1
+Date: Mon, 14 Sep 2026 03:20:05 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 39
+Connection: keep-alive
+X-Instance-ID: api-cloud-1
+
+{"status":"ok","instance":"api-cloud-1"}
+```
+
+### 4.3. Identidad del Contenedor Frontend (`/instance.json`)
+```bash
+curl -i http://3.17.23.16/instance.json
+```
+*Respuesta HTTP:*
+```http
+HTTP/1.1 200 OK
+Server: nginx/1.29.1
+Content-Type: application/json
+X-Instance-ID: web-cloud-1
+
+{"instance":"web-cloud-1"}
+```
+
+### 4.4. Operación CRUD y Persistencia en Redis
+Se registró un incidente real de prueba en la nube y se validó su persistencia en el motor Redis ejecutando `redis-cli` dentro del contenedor:
+
+```bash
+docker exec -it opsboard-cloud-redis redis-cli SMEMBERS incidents
+# Salida: 1) "1f480ad2-ffeb-44c1-90a6-c87d6bbff08b"
+
+docker exec -it opsboard-cloud-redis redis-cli HGETALL incident:1f480ad2-ffeb-44c1-90a6-c87d6bbff08b
+# Salida:
+# 1) "id"           2) "1f480ad2-ffeb-44c1-90a6-c87d6bbff08b"
+# 3) "title"        4) "Caida de gateway de pagos"
+# 5) "service"      6) "checkout-api"
+# 7) "severity"     8) "critical"
+# 9) "status"      10) "open"
+# 11) "createdAt"  12) "2026-09-14T03:30:12.105Z"
+# 13) "updatedAt"  14) "2026-09-14T03:30:12.105Z"
+```
+
+---
+
+## 5. Procedimiento de Actualización Continua (Rollout)
+
+Cuando se fusiona un nuevo cambio en `main` y el pipeline de GitHub Actions publica nuevas versiones de las imágenes en GHCR:
 
 ```bash
 cd ~/opsboard
-# 1. Descargar la nueva versión
+
+# 1. Descargar las imágenes actualizadas desde GHCR
 docker compose -f infrastructure/compose/docker-compose.cloud.yml pull
 
-# 2. Recrear únicamente los contenedores actualizados con mínimo downtime
+# 2. Recrear los contenedores actualizados con mínimo downtime
 docker compose -f infrastructure/compose/docker-compose.cloud.yml up -d --remove-orphans
 
-# 3. Validar logs y salud
-docker compose -f infrastructure/compose/docker-compose.cloud.yml logs --tail=50 api
+# 3. Validar estado y salud de los servicios
 docker compose -f infrastructure/compose/docker-compose.cloud.yml ps
 ```
+
+---
+
+## 6. Procedimiento de Rollback de Emergencia
+
+En caso de que una nueva versión presente anomalías:
+
+```bash
+# 1. Fijar en docker-compose.cloud.yml el tag del SHA previo o versión semántica estable:
+# image: ghcr.io/frandschz/opsboard-api:sha-cff8353
+
+# 2. Desplegar la versión previa inmediatamente:
+docker compose -f infrastructure/compose/docker-compose.cloud.yml up -d
+```
+

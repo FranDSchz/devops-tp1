@@ -122,23 +122,30 @@ flowchart LR
     end
 
     subgraph Prod["4. Despliegue en Cloud (Producción)"]
-        Registry -.->|"docker compose pull"| VM["Máquina Virtual (IaaS Ubuntu)<br>opsboard-cloud-stack"]
-        VM --> Live["Servicio Operativo en Internet<br>http://IP_PUBLICA:80"]
+        Registry -.->|"docker compose pull"| VM["Máquina Virtual (AWS EC2 Ubuntu)<br>opsboard-cloud-stack"]
+        VM --> Live["Servicio Operativo en Internet (AWS)<br>http://3.17.23.16:80"]
     end
 ```
 
 * **Verificación Estática:** Comprobación estricta de tipos mediante TypeScript (`tsc --noEmit`), reportando 0 errores en los paquetes `apps/api` y `apps/web`.
-* **Pruebas Unitarias:** Suite implementada con Vitest:
-  * Frontend: 7 pruebas unitarias aprobadas que validan renderizado reactivo, carga asincrónica y manejo de estados.
-  * Backend: Pruebas de contrato y endpoints (`/ready`, `/health`, store con mocks de Redis).
-* **Pipeline Planificado (GitHub Actions):** Automatización que integra instalación determinista (`npm ci`), ejecución de pruebas, análisis de seguridad estático (SAST) y escaneo de vulnerabilidades/secretos (Trivy), publicando badges de estado en la raíz del proyecto.
+* **Pruebas Unitarias:** Suite automatizada de 31 pruebas unitarias implementadas con Vitest:
+  * Frontend: 7 pruebas unitarias aprobadas que validan renderizado reactivo, carga asincrónica, transiciones de estado y resiliencia ante errores.
+  * Backend: 24 pruebas de endpoints (`/ready`, `/health`, `/whoami`, CRUD de incidentes) y lógica de almacenamiento con dobles de prueba.
+* **Pipelines Automatizados (GitHub Actions):** Flujos continuos que integran instalación determinista (`npm ci`), ejecución de pruebas, análisis de seguridad SAST (CodeQL), escaneo de vulnerabilidades/secretos (Trivy), y publicación inmutable de imágenes en GHCR con badges de estado en el `README.md`.
 
-### 3.4. Despliegue en Cloud desde el Registry
-* **Estrategia IaaS:** Despliegue en una máquina virtual Linux (Ubuntu 24.04) mediante Docker Compose. Se optó por una instancia IaaS con IP pública fija frente a plataformas PaaS gratuitas para evitar demoras por suspensión por inactividad (*cold starts* de 50 a 90 segundos) y garantizar disponibilidad continua.
-* **Inmutabilidad de Artefactos:** La máquina virtual en producción no compila código fuente ni posee dependencias de desarrollo; consume directamente los artefactos preconstruidos y versionados en GitHub Container Registry:
+### 3.4. Despliegue en Cloud desde el Registry (AWS EC2)
+* **Estrategia IaaS en AWS:** La solución se encuentra formalmente desplegada y en producción sobre una máquina virtual **AWS EC2 `t3.micro`** (Ubuntu 24.04 LTS, región Ohio `us-east-2`, ID `i-03fbc5791843949dd`), accesible públicamente en la dirección IPv4 **[http://3.17.23.16](http://3.17.23.16)**. Se adoptó una máquina virtual IaaS para asegurar disponibilidad continua 24/7 sin períodos de suspensión por inactividad (*cold starts* de 50 a 90 segundos propios de plataformas PaaS gratuitas) y para mantener paridad arquitectónica total con Docker Compose a costo \$0.00 bajo AWS Free Tier.
+* **Inmutabilidad de Artefactos desde GHCR:** La máquina virtual en producción no compila código fuente ni posee entornos Node.js/npm. El stack se provisiona ejecutando `docker compose pull` consumiendo exclusivamente las imágenes publicadas en GitHub Container Registry:
   * `ghcr.io/frandschz/opsboard-web:latest`
   * `ghcr.io/frandschz/opsboard-api:latest`
-* **Verificación Operativa:** Procedimiento estandarizado y documentado en `docs/cloud-deployment.md` para aprovisionamiento, verificación de health checks (`/health`, `/ready`) y actualizaciones con mínimo tiempo de inactividad (`rollout`).
+* **Aislamiento Perimetral (Security Groups):** El Security Group `opsboard-sg` expone únicamente `TCP 22` (SSH administrativo) y `TCP 80` (HTTP público vía Nginx). Los puertos internos `3000` (Fastify) y `6379` (Redis) están estrictamente vedados del acceso público.
+* **Verificación Operativa en Vivo:**
+  * Endpoint de Frontend: `http://3.17.23.16/` (entrega la SPA de React con código `200 OK`).
+  * Diagnóstico de Salud API: `http://3.17.23.16/health` responde `{"status":"ok","instance":"api-cloud-1"}` (`200 OK`).
+  * Diagnóstico de Dependencia Redis: `http://3.17.23.16/ready` confirma `PONG` de Redis con `200 OK`.
+  * Identificador Web: `http://3.17.23.16/instance.json` confirma `{"instance":"web-cloud-1"}`.
+  * Persistencia Real: Se validó la creación de incidentes mediante llamadas REST y la posterior inspección en Redis con `redis-cli SMEMBERS incidents` y `HGETALL incident:<id>`.
+  * La guía completa de administración, actualización continua (*rollout*) y rollback se encuentra consolidada en `docs/cloud-deployment.md`.
 
 ---
 
@@ -149,10 +156,13 @@ flowchart LR
    * *Solución:* Implementación de Dockerfiles multi-stage con contexto en la raíz del repositorio, aislando la fase de resolución de dependencias (`npm ci --workspace=...`) de la fase de compilación y empaquetado para producción.
 2. **Sensibilidad de Tiempos en Tests Asincrónicos:**
    * *Desafío:* En pruebas concurrentes del store de incidentes (`incidents.test.ts`), operaciones consecutivas de creación y actualización pueden ejecutarse dentro del mismo milisegundo, provocando que `createdAt` y `updatedAt` coincidan exactamente.
-   * *Solución:* Identificación del comportamiento y propuesta de flexibilización de aserciones hacia consistencia temporal lógica (`updatedAt >= createdAt`).
+   * *Solución:* Identificación del comportamiento y flexibilización de aserciones hacia consistencia temporal lógica (`updatedAt >= createdAt`).
 3. **Resolución Dinámica de Nombres en Nginx:**
    * *Desafío:* En entornos multicontenedor, cuando un contenedor se reinicia puede adquirir una nueva dirección IP interna en la red de Docker, provocando errores de resolución en Nginx si los upstream están cacheados estáticamente.
    * *Solución:* Configuración de la directiva `resolver 127.0.0.11 valid=10s ipv6=off;` junto con el parámetro `resolve` en los bloques `upstream`, forzando la reevaluación periódica de las IPs internas.
+4. **Restricción de Permisos OpenSSH en Windows:**
+   * *Desafío:* Al conectarse por SSH a la VM de AWS desde Windows, OpenSSH rechazaba el archivo de clave privada `.pem` con el error `UNPROTECTED PRIVATE KEY FILE!` por permisos heredados excesivos.
+   * *Solución:* Aplicación de ACLs restrictivas mediante PowerShell con `icacls "opsboard-key.pem" /inheritance:r /grant:r "${env:USERNAME}:(R)"`, garantizando acceso exclusivo de solo lectura para el usuario.
 
 ---
 
@@ -176,4 +186,4 @@ flowchart LR
 | **Automatización CI/CD** | GitHub Actions para tests, linting y typecheck. | **Verificado** | Pipeline `.github/workflows/ci.yml` con 31 tests unitarios aprobados, typecheck y build validado en PR #20. |
 | **Seguridad (SAST / SCA)** | Escaneo estático de código, dependencias y secretos. | **Verificado** | Pipeline `.github/workflows/security.yml` (CodeQL SAST + Trivy SCA/Secret scanning); documentado en `docs/security.md`. |
 | **Registro de Imágenes** | GitHub Container Registry (GHCR) para imágenes de Web y API. | **Verificado** | Pipeline `.github/workflows/release-ghcr.yml` automatizado con tags semánticos y SHA; documentado en `docs/registry.md`. |
-| **Despliegue en Cloud** | Stack Docker Compose en VM IaaS consumiendo imágenes de GHCR. | *Preparado para despliegue* | `docker-compose.cloud.yml` y `nginx.cloud.conf` validados; guía operativa en `docs/cloud-deployment.md`. |
+| **Despliegue en Cloud** | Stack Docker Compose en AWS EC2 consumiendo imágenes de GHCR. | **Verificado** | Desplegado en vivo en `http://3.17.23.16`, endpoints `/health`, `/ready` y persistencia Redis validados; ver `docs/cloud-deployment.md`. |

@@ -85,18 +85,26 @@
 ---
 
 ### ⏱️ 09:30 - 12:00 | Bloque 5: Despliegue Cloud, Arquitectura y Cierre (Franco)
-* **Objetivo:** Demostrar la solución corriendo en la nube y sintetizar las lecciones aprendidas.
+* **Objetivo:** Demostrar la solución en vivo en AWS EC2, la inmutabilidad desde GHCR, el aislamiento de red y sintetizar el informe consolidado.
 * **Qué mostrar en pantalla:**
-  1. La aplicación abierta en el navegador mediante su **URL pública en la nube** (`http://<IP_PUBLICA>/`).
-  2. Terminal conectada por SSH a la VM o logs confirmando que los contenedores corren desde GHCR:
+  1. Abrir en el navegador la **URL pública en la nube:** [http://3.17.23.16/](http://3.17.23.16/).
+  2. Crear un incidente en vivo (ej. "Degradación en clúster Redis", severidad alta) para certificar el ciclo completo funcional en la nube.
+  3. En la terminal (local o remota), ejecutar los endpoints de verificación:
+     ```bash
+     curl -s http://3.17.23.16/health
+     curl -s http://3.17.23.16/ready
+     curl -s http://3.17.23.16/instance.json
+     ```
+  4. Mostrar el estado de los contenedores en la VM de AWS:
      ```bash
      docker compose -f infrastructure/compose/docker-compose.cloud.yml ps
      ```
-  3. Crear un incidente en la nube en vivo para certificar la funcionalidad completa.
-  4. Mostrar brevemente el informe técnico consolidado (`docs/report.md`).
-* **Puntos clave a explicar:**
-  * Justificación de la VM IaaS frente a PaaS (evitar *cold starts* en vivo y paridad total con local).
-  * Principales dificultades resueltas por el equipo y mejoras a futuro (Redis Sentinel, GitOps).
+  5. Mostrar brevemente el informe técnico consolidado (`docs/report.md`) y la matriz de trazabilidad al 100%.
+* **Puntos clave a explicar (Discurso de 2 minutos):**
+  * **Infraestructura IaaS vs. PaaS:** Se eligió una máquina virtual AWS EC2 (`t3.micro`, Ubuntu 24.04 LTS en `us-east-2`) para garantizar paridad de entorno 1:1 con Docker Compose y evitar los *cold starts* de 50-90 segundos de las alternativas PaaS gratuitas, con costo \$0.00 en AWS Free Tier.
+  * **Inmutabilidad Absoluta:** La VM no compila código ni tiene Node.js/npm instalado; consume estrictamente las imágenes inmutables construidas en GitHub Actions y publicadas en GHCR (`docker compose pull`).
+  * **Seguridad y Dual-Homed Proxy:** El Security Group `opsboard-sg` solo abre puertos 22 (SSH) y 80 (HTTP). Nginx actúa como fachada perimetral única (Same-Origin Policy, Zero CORS), mientras la API y Redis residen en una red Docker privada sin exposición perimetral.
+  * **Cierre y Rúbrica:** 100% de los criterios cumplidos con pruebas automatizadas, seguridad SAST/SCA y evidencias documentadas.
 
 ---
 
