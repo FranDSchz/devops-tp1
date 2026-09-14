@@ -85,26 +85,28 @@
 ---
 
 ### ⏱️ 09:30 - 12:00 | Bloque 5: Despliegue Cloud, Arquitectura y Cierre (Franco)
-* **Objetivo:** Demostrar la solución en vivo en AWS EC2, la inmutabilidad desde GHCR, el aislamiento de red y sintetizar el informe consolidado.
+* **Objetivo:** Demostrar la solución en vivo en AWS EC2, la paridad multi-réplica total, el balanceo y tolerancia a fallos en la nube, y sintetizar el informe consolidado.
 * **Qué mostrar en pantalla:**
   1. Abrir en el navegador la **URL pública en la nube:** [http://3.17.23.16/](http://3.17.23.16/).
   2. Crear un incidente en vivo (ej. "Degradación en clúster Redis", severidad alta) para certificar el ciclo completo funcional en la nube.
-  3. En la terminal (local o remota), ejecutar los endpoints de verificación:
+  3. En la terminal, **demostrar el balanceo de carga Round-Robin en AWS en vivo**:
      ```bash
-     curl -s http://3.17.23.16/health
-     curl -s http://3.17.23.16/ready
-     curl -s http://3.17.23.16/instance.json
+     for i in {1..6}; do curl -s http://3.17.23.16/health; echo ""; done
      ```
-  4. Mostrar el estado de los contenedores en la VM de AWS:
+     *(Destacar que alternan `api-cloud-1`, `api-cloud-2` y `api-cloud-3` en plena nube de AWS).*
+  4. **Demostrar la tolerancia a fallos en vivo en la nube (Opcional si hay tiempo):**
+     * Detener una réplica remota: `docker stop opsboard-cloud-api-2`.
+     * Repetir el curl y mostrar que la web y los endpoints siguen al 100% respondiendo desde los nodos 1 y 3 sin arrojar error 502.
+  5. Mostrar el estado de los 8 contenedores saludables en la VM de AWS:
      ```bash
      docker compose -f infrastructure/compose/docker-compose.cloud.yml ps
      ```
-  5. Mostrar brevemente el informe técnico consolidado (`docs/report.md`) y la matriz de trazabilidad al 100%.
+  6. Mostrar brevemente el informe técnico consolidado (`docs/report.md`) y la matriz de trazabilidad al 100%.
 * **Puntos clave a explicar (Discurso de 2 minutos):**
-  * **Infraestructura IaaS vs. PaaS:** Se eligió una máquina virtual AWS EC2 (`t3.micro`, Ubuntu 24.04 LTS en `us-east-2`) para garantizar paridad de entorno 1:1 con Docker Compose y evitar los *cold starts* de 50-90 segundos de las alternativas PaaS gratuitas, con costo \$0.00 en AWS Free Tier.
+  * **Paridad Dev/Prod Total (Factor X):** Fuimos más allá de la consigna mínima. En vez de una sola instancia, implementamos en AWS EC2 la **misma topología multi-réplica que en local (3 Web, 3 API, Redis persistente y Nginx)** con costo \$0.00 en AWS Free Tier y cero *cold starts*.
   * **Inmutabilidad Absoluta:** La VM no compila código ni tiene Node.js/npm instalado; consume estrictamente las imágenes inmutables construidas en GitHub Actions y publicadas en GHCR (`docker compose pull`).
-  * **Seguridad y Dual-Homed Proxy:** El Security Group `opsboard-sg` solo abre puertos 22 (SSH) y 80 (HTTP). Nginx actúa como fachada perimetral única (Same-Origin Policy, Zero CORS), mientras la API y Redis residen en una red Docker privada sin exposición perimetral.
-  * **Cierre y Rúbrica:** 100% de los criterios cumplidos con pruebas automatizadas, seguridad SAST/SCA y evidencias documentadas.
+  * **Seguridad y Dual-Homed Proxy:** El Security Group `opsboard-sg` solo abre puertos 22 (SSH) y 80 (HTTP). Nginx actúa como fachada perimetral única (Same-Origin Policy, Zero CORS), mientras la API y Redis residen en redes privadas de Docker sin exposición perimetral.
+  * **Cierre y Rúbrica:** 100% de los criterios cumplidos con pruebas automatizadas, seguridad SAST/SCA, y evidencias de resiliencia tanto en local como en la nube real.
 
 ---
 

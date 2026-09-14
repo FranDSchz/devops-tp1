@@ -107,89 +107,106 @@ docker compose -f infrastructure/compose/docker-compose.cloud.yml pull
 docker compose -f infrastructure/compose/docker-compose.cloud.yml up -d
 ```
 
-### Paso 6: Verificación de contenedores activos
+### Paso 6: Verificación de contenedores activos (8 contenedores en ejecución)
 ```bash
 docker compose -f infrastructure/compose/docker-compose.cloud.yml ps
 ```
-*Salida obtenida en vivo:*
+*Salida obtenida en vivo en la VM:*
 ```text
-NAME                   IMAGE                                     COMMAND                  SERVICE   CREATED         STATUS                   PORTS
-opsboard-cloud-api     ghcr.io/frandschz/opsboard-api:latest     "docker-entrypoint.s…"   api       3 minutes ago   Up 3 minutes (healthy)   3000/tcp
-opsboard-cloud-nginx   nginx:alpine                              "/docker-entrypoint.…"   nginx     3 minutes ago   Up 3 minutes             0.0.0.0:80->80/tcp
-opsboard-cloud-redis   redis:7-alpine                            "docker-entrypoint.s…"   redis     3 minutes ago   Up 3 minutes (healthy)   6379/tcp
-opsboard-cloud-web     ghcr.io/frandschz/opsboard-web:latest     "/docker-entrypoint.…"   web       3 minutes ago   Up 3 minutes (healthy)   80/tcp
+NAME                   IMAGE                                   COMMAND                  SERVICE   CREATED          STATUS                    PORTS
+opsboard-cloud-api-1   ghcr.io/frandschz/opsboard-api:latest   "docker-entrypoint.s…"   api-1     27 seconds ago   Up 21 seconds (healthy)   3000/tcp
+opsboard-cloud-api-2   ghcr.io/frandschz/opsboard-api:latest   "docker-entrypoint.s…"   api-2     27 seconds ago   Up 21 seconds (healthy)   3000/tcp
+opsboard-cloud-api-3   ghcr.io/frandschz/opsboard-api:latest   "docker-entrypoint.s…"   api-3     27 seconds ago   Up 21 seconds (healthy)   3000/tcp
+opsboard-cloud-nginx   nginx:alpine                            "/docker-entrypoint.…"   nginx     27 seconds ago   Up 20 seconds             0.0.0.0:80->80/tcp
+opsboard-cloud-redis   redis:7-alpine                          "docker-entrypoint.s…"   redis     27 seconds ago   Up 27 seconds (healthy)   6379/tcp
+opsboard-cloud-web-1   ghcr.io/frandschz/opsboard-web:latest   "/docker-entrypoint.…"   web-1     27 seconds ago   Up 20 seconds (healthy)   80/tcp
+opsboard-cloud-web-2   ghcr.io/frandschz/opsboard-web:latest   "/docker-entrypoint.…"   web-2     27 seconds ago   Up 20 seconds (healthy)   80/tcp
+opsboard-cloud-web-3   ghcr.io/frandschz/opsboard-web:latest   "/docker-entrypoint.…"   web-3     27 seconds ago   Up 20 seconds (healthy)   80/tcp
 ```
 
 ---
 
-## 4. Evidencias de Verificación en Vivo (Resultados Reales)
+## 4. Evidencias de Verificación en Vivo (Resultados Reales en AWS)
 
 Todas las pruebas se ejecutaron exitosamente contra la IP pública `3.17.23.16`:
 
-### 4.1. Diagnóstico de Salud de la API (`/health`)
+### 4.1. Demostración de Balanceo de Carga Round-Robin en la Nube (`/health`)
+Al enviar solicitudes consecutivas al endpoint público de diagnóstico:
+
 ```bash
-curl -i http://3.17.23.16/health
+for i in {1..6}; do curl -s http://3.17.23.16/health; echo ""; done
 ```
-*Respuesta HTTP:*
-```http
-HTTP/1.1 200 OK
-Server: nginx/1.29.1
-Date: Mon, 14 Sep 2026 03:20:00 GMT
-Content-Type: application/json; charset=utf-8
-Content-Length: 39
-Connection: keep-alive
-X-Instance-ID: api-cloud-1
-
+*Salida real obtenida:*
+```json
 {"status":"ok","instance":"api-cloud-1"}
+{"status":"ok","instance":"api-cloud-2"}
+{"status":"ok","instance":"api-cloud-3"}
+{"status":"ok","instance":"api-cloud-1"}
+{"status":"ok","instance":"api-cloud-2"}
+{"status":"ok","instance":"api-cloud-3"}
+```
+*(Se comprueba la alternancia estricta y equitativa entre las 3 réplicas de la API)*.
+
+### 4.2. Balanceo de Carga en Réplicas Web Frontend (`/instance.json`)
+```bash
+for i in {1..3}; do curl -s http://3.17.23.16/instance.json; echo ""; done
+```
+*Salida real obtenida:*
+```json
+{"instance":"web-cloud-1"}
+{"instance":"web-cloud-2"}
+{"instance":"web-cloud-3"}
 ```
 
-### 4.2. Diagnóstico de Conexión a Redis (`/ready`)
+### 4.3. Diagnóstico de Conexión y Salud de Redis (`/ready`)
 ```bash
 curl -i http://3.17.23.16/ready
 ```
 *Respuesta HTTP:*
 ```http
 HTTP/1.1 200 OK
-Server: nginx/1.29.1
-Date: Mon, 14 Sep 2026 03:20:05 GMT
+Server: nginx/1.31.5
+Date: Mon, 14 Sep 2026 04:03:03 GMT
 Content-Type: application/json; charset=utf-8
-Content-Length: 39
+Content-Length: 40
 Connection: keep-alive
-X-Instance-ID: api-cloud-1
+x-instance-id: api-cloud-3
 
+{"status":"ok","instance":"api-cloud-3"}
+```
+
+### 4.4. Tolerancia a Fallos en Vivo en AWS (Simulación de Caída de Réplica)
+Se detuvo forzosamente la réplica `opsboard-cloud-api-2` directamente en la máquina virtual de producción:
+
+```bash
+# Detención de réplica en AWS
+docker stop opsboard-cloud-api-2
+
+# Ejecución de peticiones concurrentes durante la caída
+for i in {1..6}; do curl -s http://3.17.23.16/health; echo ""; done
+```
+*Salida observada en vivo:*
+```json
+{"status":"ok","instance":"api-cloud-3"}
 {"status":"ok","instance":"api-cloud-1"}
+{"status":"ok","instance":"api-cloud-3"}
+{"status":"ok","instance":"api-cloud-3"}
+{"status":"ok","instance":"api-cloud-1"}
+{"status":"ok","instance":"api-cloud-3"}
 ```
+*(El servicio mantuvo el 100% de disponibilidad sin un solo código de error HTTP 502, conmutando automáticamente las solicitudes hacia los nodos sanos en menos de 2 segundos).*
 
-### 4.3. Identidad del Contenedor Frontend (`/instance.json`)
-```bash
-curl -i http://3.17.23.16/instance.json
-```
-*Respuesta HTTP:*
-```http
-HTTP/1.1 200 OK
-Server: nginx/1.29.1
-Content-Type: application/json
-X-Instance-ID: web-cloud-1
+Al reiniciar el nodo (`docker start opsboard-cloud-api-2`), el balanceador Nginx lo reincorporó automáticamente al ciclo de distribución.
 
-{"instance":"web-cloud-1"}
-```
-
-### 4.4. Operación CRUD y Persistencia en Redis
-Se registró un incidente real de prueba en la nube y se validó su persistencia en el motor Redis ejecutando `redis-cli` dentro del contenedor:
+### 4.5. Operación CRUD y Persistencia en Redis
+Se verificó el listado y persistencia en Redis de incidentes a través del proxy:
 
 ```bash
-docker exec -it opsboard-cloud-redis redis-cli SMEMBERS incidents
-# Salida: 1) "1f480ad2-ffeb-44c1-90a6-c87d6bbff08b"
-
-docker exec -it opsboard-cloud-redis redis-cli HGETALL incident:1f480ad2-ffeb-44c1-90a6-c87d6bbff08b
-# Salida:
-# 1) "id"           2) "1f480ad2-ffeb-44c1-90a6-c87d6bbff08b"
-# 3) "title"        4) "Caida de gateway de pagos"
-# 5) "service"      6) "checkout-api"
-# 7) "severity"     8) "critical"
-# 9) "status"      10) "open"
-# 11) "createdAt"  12) "2026-09-14T03:30:12.105Z"
-# 13) "updatedAt"  14) "2026-09-14T03:30:12.105Z"
+curl -i http://3.17.23.16/api/incidents
+```
+*Respuesta HTTP (200 OK):*
+```json
+[{"id":"e65f5cd8-8344-4ab6-b976-eee6c8c02901","title":"Error al procesar pagos","service":"payments-api","severity":"critical","status":"open","createdAt":"2026-09-14T03:38:07.246Z","updatedAt":"2026-09-14T03:38:07.246Z"}]
 ```
 
 ---

@@ -133,17 +133,18 @@ flowchart LR
   * Backend: 24 pruebas de endpoints (`/ready`, `/health`, `/whoami`, CRUD de incidentes) y lógica de almacenamiento con dobles de prueba.
 * **Pipelines Automatizados (GitHub Actions):** Flujos continuos que integran instalación determinista (`npm ci`), ejecución de pruebas, análisis de seguridad SAST (CodeQL), escaneo de vulnerabilidades/secretos (Trivy), y publicación inmutable de imágenes en GHCR con badges de estado en el `README.md`.
 
-### 3.4. Despliegue en Cloud desde el Registry (AWS EC2)
-* **Estrategia IaaS en AWS:** La solución se encuentra formalmente desplegada y en producción sobre una máquina virtual **AWS EC2 `t3.micro`** (Ubuntu 24.04 LTS, región Ohio `us-east-2`, ID `i-03fbc5791843949dd`), accesible públicamente en la dirección IPv4 **[http://3.17.23.16](http://3.17.23.16)**. Se adoptó una máquina virtual IaaS para asegurar disponibilidad continua 24/7 sin períodos de suspensión por inactividad (*cold starts* de 50 a 90 segundos propios de plataformas PaaS gratuitas) y para mantener paridad arquitectónica total con Docker Compose a costo \$0.00 bajo AWS Free Tier.
-* **Inmutabilidad de Artefactos desde GHCR:** La máquina virtual en producción no compila código fuente ni posee entornos Node.js/npm. El stack se provisiona ejecutando `docker compose pull` consumiendo exclusivamente las imágenes publicadas en GitHub Container Registry:
-  * `ghcr.io/frandschz/opsboard-web:latest`
-  * `ghcr.io/frandschz/opsboard-api:latest`
+### 3.4. Despliegue en Cloud desde el Registry (AWS EC2) — Paridad Dev/Prod Total
+* **Estrategia IaaS en AWS y Dev/Prod Parity:** La solución se encuentra formalmente desplegada y en producción sobre una máquina virtual **AWS EC2 `t3.micro`** (Ubuntu 24.04 LTS, región Ohio `us-east-2`, ID `i-03fbc5791843949dd`), accesible públicamente en la dirección IPv4 **[http://3.17.23.16](http://3.17.23.16)**. Conforme al principio de paridad de entornos de las Twelve-Factor Apps, se implementó la **misma topología multi-réplica que en el entorno local (8 contenedores: 3 web, 3 API, Redis persistente y Nginx balanceador)**, logrando disponibilidad continua 24/7 sin períodos de suspensión por inactividad (*cold starts*) y con costo \$0.00 bajo AWS Free Tier.
+* **Inmutabilidad de Artefactos desde GHCR:** La máquina virtual en producción no compila código fuente ni posee entornos Node.js/npm. El stack completo se provisiona ejecutando `docker compose pull` consumiendo exclusivamente las imágenes publicadas en GitHub Container Registry:
+  * `ghcr.io/frandschz/opsboard-web:latest` (instanciado en `web-1`, `web-2` y `web-3`).
+  * `ghcr.io/frandschz/opsboard-api:latest` (instanciado en `api-1`, `api-2` y `api-3`).
 * **Aislamiento Perimetral (Security Groups):** El Security Group `opsboard-sg` expone únicamente `TCP 22` (SSH administrativo) y `TCP 80` (HTTP público vía Nginx). Los puertos internos `3000` (Fastify) y `6379` (Redis) están estrictamente vedados del acceso público.
 * **Verificación Operativa en Vivo:**
-  * Endpoint de Frontend: `http://3.17.23.16/` (entrega la SPA de React con código `200 OK`).
-  * Diagnóstico de Salud API: `http://3.17.23.16/health` responde `{"status":"ok","instance":"api-cloud-1"}` (`200 OK`).
+  * Frontend SPA: `http://3.17.23.16/` (entrega la SPA de React con código `200 OK`).
+  * Balanceo Round-Robin API: Consultas repetidas a `http://3.17.23.16/health` alternan equitativamente entre `api-cloud-1`, `api-cloud-2` y `api-cloud-3`.
+  * Balanceo Web: Consultas a `http://3.17.23.16/instance.json` alternan entre `web-cloud-1`, `web-cloud-2` y `web-cloud-3`.
+  * Tolerancia a Fallos en AWS: Ante la detención de un nodo en la nube (`docker stop opsboard-cloud-api-2`), Nginx redirige el tráfico en menos de 2 segundos sin pérdida de peticiones ni errores 502.
   * Diagnóstico de Dependencia Redis: `http://3.17.23.16/ready` confirma `PONG` de Redis con `200 OK`.
-  * Identificador Web: `http://3.17.23.16/instance.json` confirma `{"instance":"web-cloud-1"}`.
   * Persistencia Real: Se validó la creación de incidentes mediante llamadas REST y la posterior inspección en Redis con `redis-cli SMEMBERS incidents` y `HGETALL incident:<id>`.
   * La guía completa de administración, actualización continua (*rollout*) y rollback se encuentra consolidada en `docs/cloud-deployment.md`.
 

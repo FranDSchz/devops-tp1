@@ -56,9 +56,9 @@ flowchart TD
 
 ---
 
-## 3. Topología Cloud en Producción (AWS EC2 + GHCR)
+## 3. Topología Cloud en Producción (AWS EC2 + GHCR) — Paridad Dev/Prod Total
 
-El entorno cloud opera sobre una máquina virtual **AWS EC2 (Ubuntu 24.04 LTS)** en la región `us-east-2` (Ohio), con acceso público a través de la IP `3.17.23.16`.
+El entorno cloud opera sobre una máquina virtual **AWS EC2 (Ubuntu 24.04 LTS)** en la región `us-east-2` (Ohio), con acceso público a través de la IP `3.17.23.16`. Implementa una arquitectura multi-réplica idéntica al entorno local:
 
 ```mermaid
 flowchart TD
@@ -67,21 +67,30 @@ flowchart TD
     subgraph AWS["Instancia AWS EC2 (t3.micro - Ubuntu 24.04 LTS | IP: 3.17.23.16)"]
         SG --> C_NGINX["opsboard-cloud-nginx<br>(Nginx Alpine :80)"]
 
-        subgraph DockerCloudFront["Red Docker: cloud-frontend"]
-            C_WEB["opsboard-cloud-web (:80)<br>Imagen: ghcr.io/.../opsboard-web:latest"]
+        subgraph DockerCloudFront["Red Docker: frontend (Aislada)"]
+            C_UP_WEB["upstream web_upstream<br>(Round-Robin)"]
+            CW1["opsboard-cloud-web-1 (:80)"]
+            CW2["opsboard-cloud-web-2 (:80)"]
+            CW3["opsboard-cloud-web-3 (:80)"]
+            C_UP_WEB --> CW1 & CW2 & CW3
         end
 
-        subgraph DockerCloudBack["Red Docker: cloud-backend (Aislada de Internet)"]
-            C_API["opsboard-cloud-api (:3000)<br>Imagen: ghcr.io/.../opsboard-api:latest"]
-            C_REDIS[("opsboard-cloud-redis (:6379)<br>Redis 7 Alpine")]
+        subgraph DockerCloudBack["Red Docker: backend (Privada / Aislada de Internet)"]
+            C_UP_API["upstream api_upstream<br>(Round-Robin + Failover &lt;2s)"]
+            CA1["opsboard-cloud-api-1 (:3000)"]
+            CA2["opsboard-cloud-api-2 (:3000)"]
+            CA3["opsboard-cloud-api-3 (:3000)"]
+            
+            C_REDIS[("opsboard-cloud-redis<br>(Redis 7 Alpine :6379)")]
             C_VOL[("Volumen Persistente<br>redis-cloud-data -> /data")]
             
-            C_API -- "TCP :6379" --> C_REDIS
+            C_UP_API --> CA1 & CA2 & CA3
+            CA1 & CA2 & CA3 -- "TCP :6379" --> C_REDIS
             C_REDIS --- C_VOL
         end
 
-        C_NGINX -- "Path /" --> C_WEB
-        C_NGINX -- "Path /api/*, /health, /ready" --> C_API
+        C_NGINX -- "Path / (Activos SPA y /instance.json)" --> C_UP_WEB
+        C_NGINX -- "Path /api/*, /health, /ready, /whoami" --> C_UP_API
     end
 
     subgraph GHCR["GitHub Container Registry (Inmutable)"]
@@ -89,8 +98,8 @@ flowchart TD
         GHCR_API[("ghcr.io/frandschz/opsboard-api:latest")]
     end
 
-    GHCR_WEB -.->|"docker compose pull"| C_WEB
-    GHCR_API -.->|"docker compose pull"| C_API
+    GHCR_WEB -.->|"docker compose pull"| CW1 & CW2 & CW3
+    GHCR_API -.->|"docker compose pull"| CA1 & CA2 & CA3
 ```
 
 ---
