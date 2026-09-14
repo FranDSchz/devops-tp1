@@ -1,0 +1,61 @@
+name: Security
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  codeql-sast:
+    name: CodeQL (SAST)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+  trivy-scan:
+    name: Trivy (SCA & Secret Scanning)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
+      - name: Run Trivy SCA vulnerability scanner (Dependencies)
+        run: |
+          trivy fs --format sarif --output trivy-sca-results.sarif --severity CRITICAL,HIGH .
+
+      - name: Upload Trivy SCA SARIF report
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-sca-results.sarif"
+          category: "trivy-sca"
+
+      - name: Run Trivy Secret Scanner
+        run: |
+          trivy fs --scanners secret --exit-code 0 .

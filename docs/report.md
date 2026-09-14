@@ -173,7 +173,7 @@ flowchart LR
 | **API REST (Backend)** | Fastify 5 + TypeScript, arquitectura stateless. | **Verificado** | Endpoints operativos (`/api/incidents`, `/health`, `/ready`, `/whoami`), typecheck sin errores. |
 | **Persistencia (Redis)** | Redis 7 Alpine, estructuras Hash + Set, volumen persistente. | **Verificado** | Procedimiento de consulta CLI documentado en `docs/cheatsheet-redis.md` y verificado en `docs/evidencia-m2.md`. |
 | **Proxy y Balanceo Local** | Nginx con Round-Robin, 3 nodos web y 3 nodos API. | **Verificado** | Trazabilidad por `X-Instance-ID` y tolerancia a la detención de nodos documentada en `docs/evidencia-m2.md`. |
-| **Automatización CI/CD** | GitHub Actions para tests, linting y typecheck. | *En integración* | Scripts locales funcionales; workflows en `.github/workflows/` en proceso de publicación. |
-| **Seguridad (SAST / SCA)** | Escaneo estático de código, dependencias y secretos. | *En integración* | Definición de análisis de seguridad para el pipeline de integración. |
-| **Registro de Imágenes** | GitHub Container Registry (GHCR) para imágenes de Web y API. | *En integración* | Dockerfiles optimizados listos para publicación automatizada. |
+| **Automatización CI/CD** | GitHub Actions para tests, linting y typecheck. | **Verificado** | Pipeline `.github/workflows/ci.yml` con 31 tests unitarios aprobados, typecheck y build validado en PR #20. |
+| **Seguridad (SAST / SCA)** | Escaneo estático de código, dependencias y secretos. | **Verificado** | Pipeline `.github/workflows/security.yml` (CodeQL SAST + Trivy SCA/Secret scanning); documentado en `docs/security.md`. |
+| **Registro de Imágenes** | GitHub Container Registry (GHCR) para imágenes de Web y API. | **Verificado** | Pipeline `.github/workflows/release-ghcr.yml` automatizado con tags semánticos y SHA; documentado en `docs/registry.md`. |
 | **Despliegue en Cloud** | Stack Docker Compose en VM IaaS consumiendo imágenes de GHCR. | *Preparado para despliegue* | `docker-compose.cloud.yml` y `nginx.cloud.conf` validados; guía operativa en `docs/cloud-deployment.md`. |
