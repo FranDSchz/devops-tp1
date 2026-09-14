@@ -170,7 +170,9 @@ flowchart LR
 ## 5. Posibles Mejoras a Futuro
 
 1. **Alta Disponibilidad de Persistencia (Redis Sentinel):** Incorporar un esquema primario-réplica gestionado por nodos Sentinel para failover automático de la base de datos sin pérdida de transacciones.
-2. **Entrega Continua con Enfoque GitOps:** Automatizar el despliegue en la nube mediante agentes tipo Watchtower o ArgoCD, sincronizando el estado de ejecución ante la publicación de nuevos tags en GHCR.
+2. **Entrega Continua (CD) y Enfoque GitOps:** En el alcance actual, el pipeline automatizado cubre Continuous Integration (CI) y publicación en GHCR, mientras que la orquestación en la nube se gestiona con Docker Compose. Como mejora hacia Continuous Deployment (CD) total, se propone:
+   * **Empaquetar Nginx en su propia imagen inmutable (`ghcr.io/.../opsboard-nginx`):** Evitando montar archivos de configuración locales (`nginx.cloud.conf`) en el host.
+   * **Automatización del Despliegue (GitOps / CD Runner):** Integrar agentes como Watchtower, ArgoCD o un workflow de CD en GitHub Actions que sincronice automáticamente el servidor ante cada push a `main`, eliminando toda intervención manual de sincronización en la máquina virtual.
 3. **Observabilidad Centralizada:** Instrumentar métricas mediante Prometheus y Grafana (latencia HTTP, uso de memoria en Redis y tasas de error), complementado con centralización de logs estructurados.
 4. **Seguridad Perimetral y Terminación TLS:** Automatizar el aprovisionamiento y renovación de certificados SSL/TLS mediante Let's Encrypt y Certbot configurado como contenedor complementario en Nginx.
 
