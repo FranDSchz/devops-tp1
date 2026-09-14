@@ -1,6 +1,8 @@
 # OpsBoard
 
 [![CI](https://github.com/FranDSchz/devops-tp1/actions/workflows/ci.yml/badge.svg)](https://github.com/FranDSchz/devops-tp1/actions/workflows/ci.yml)
+[![Security](https://github.com/FranDSchz/devops-tp1/actions/workflows/security.yml/badge.svg)](https://github.com/FranDSchz/devops-tp1/actions/workflows/security.yml)
+[![GHCR Images](https://github.com/FranDSchz/devops-tp1/actions/workflows/release-ghcr.yml/badge.svg)](https://github.com/FranDSchz/devops-tp1/actions/workflows/release-ghcr.yml)
 
 Trabajo Practico 1 de DevOps - UTN FRRe 2026.
 
@@ -11,7 +13,8 @@ OpsBoard sera una aplicacion web sencilla para registrar y gestionar incidentes 
 - **M0**: completado (documentacion, plantillas y organizacion inicial).
 - **M1**: completado (aplicacion base: API, web y tests unitarios).
 - **M2**: completado (contenedores, Nginx, tres replicas web y tres API, balanceo y tolerancia a fallos).
-- **M3** (CI, seguridad y Registry) y **M4** (cloud y entrega): pendientes.
+- **M3**: completado (CI, seguridad CodeQL/Trivy y Registry GHCR).
+- **M4**: completado (arquitectura cloud y documentacion consolidada).
 
 La aplicacion es ejecutable: ver [Ejecucion local](#ejecucion-local-docker-compose).
 
@@ -161,6 +164,10 @@ Consultar [CONTRIBUTING.md](CONTRIBUTING.md) antes de comenzar una tarea.
 - [Decisiones del proyecto](docs/decisions.md)
 - [Roadmap](docs/roadmap.md)
 - [Estrategia y casos de pruebas unitarias](docs/tests.md)
+- [Estrategia de seguridad, SAST y SCA](docs/security.md)
+- [Publicacion y uso de imagenes en GHCR](docs/registry.md)
+- [Procedimiento de despliegue en Cloud](docs/cloud-deployment.md)
+- [Informe tecnico de entrega](docs/report.md)
 
 ## Entregables previstos
 
