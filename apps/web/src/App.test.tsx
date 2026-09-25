@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import App from "./App";
 import type { Incident } from "./types/incident";
@@ -16,9 +16,27 @@ const mockIncident: Incident = {
 
 const fetchStub = vi.fn();
 
+const emptyFleet = {
+  servedBy: "api-1",
+  count: 0,
+  expected: 3,
+  heartbeatTtlMs: 15000,
+  instances: [],
+};
+
+const readyResponse = { status: "ok", redis: "ok", instance: "api-1", uptimeSeconds: 30 };
+
+let topology: { fleet: unknown; readiness: unknown; web: unknown; failFleet: boolean };
+
 beforeEach(() => {
   fetchStub.mockReset();
   vi.stubGlobal("fetch", fetchStub);
+  topology = {
+    fleet: emptyFleet,
+    readiness: readyResponse,
+    web: { instance: "web-1" },
+    failFleet: false,
+  };
 });
 
 describe("OpsBoard", () => {
@@ -127,28 +145,78 @@ describe("OpsBoard", () => {
     await waitFor(() => expect(screen.queryByText("Redis unavailable")).not.toBeInTheDocument());
   });
 
-  it("shows which web and api instances served the page", async () => {
-    fetchStub.mockImplementation((url: string) => {
-      if (url.includes("instance.json")) {
-        return Promise.resolve({ ok: true, json: async () => ({ instance: "web-2" }) });
-      }
-      if (url === "/health") {
-        return Promise.resolve({ ok: true, json: async () => ({ status: "ok", instance: "api-3" }) });
-      }
-      return Promise.resolve({ ok: true, json: async () => [] });
-    });
+  it("shows the replica panel with the instance that served the page", async () => {
+    topology.fleet = buildFleet(["api-1", "api-2", "api-3"], "api-2");
+    topology.web = { instance: "web-2" };
+    mockApiResponses(response([]));
 
     render(<App />);
-    expect(await screen.findByText("Web web-2 · API api-3")).toBeTruthy();
+
+    const panel = await screen.findByLabelText("Estado de las instancias del servicio");
+    await waitFor(() => {
+      expect(panel).toHaveTextContent("3 / 3 réplicas API en línea");
+    });
+
+    expect(panel).toHaveTextContent("api-1");
+    expect(panel).toHaveTextContent("api-2");
+    expect(panel).toHaveTextContent("api-3");
+    expect(screen.getByText("sirviendo tu sesión")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("web-2");
+    expect(screen.getByText("Redis conectado")).toBeInTheDocument();
+  });
+
+  it("warns when a replica is missing from the fleet registry", async () => {
+    topology.fleet = buildFleet(["api-1", "api-3"], "api-1");
+    mockApiResponses(response([]));
+
+    render(<App />);
+
+    const panel = await screen.findByLabelText("Estado de las instancias del servicio");
+    await waitFor(() => {
+      expect(panel).toHaveTextContent("2 / 3 réplicas API en línea");
+    });
+    expect(within(panel).getByRole("status")).toHaveTextContent("Replica caída");
+  });
+
+  it("keeps the incidents list working when the topology endpoint fails", async () => {
+    topology.failFleet = true;
+    mockApiResponses(response([mockIncident]));
+
+    render(<App />);
+
+    expect(await screen.findByText("Falla en pagos")).toBeInTheDocument();
+    expect(await screen.findByText("No pudimos consultar la topología")).toBeInTheDocument();
   });
 });
+
+function buildFleet(ids: string[], servedBy: string) {
+  const instances = ids.map((id, index) => ({
+    id,
+    role: "api" as const,
+    startedAt: "2026-01-01T12:00:00.000Z",
+    startedAtMs: Date.UTC(2026, 0, 1, 12, 0, 0),
+    uptimeSeconds: 90 + index,
+    memoryRss: 52428800,
+    heapUsed: 12582912,
+    node: "opsboard-node",
+    nodeVersion: "v22.11.0",
+    pid: 100 + index,
+    lastSeenMs: Date.UTC(2026, 0, 1, 12, 5, 0),
+  }));
+
+  return { servedBy, count: instances.length, expected: 3, heartbeatTtlMs: 15000, instances };
+}
 
 function mockApiResponses(...responses: Response[]) {
   let responseIndex = 0;
   fetchStub.mockImplementation((url: string) => {
-    if (url === "/instance.json" || url === "/health") {
-      return Promise.resolve(response({}));
+    if (url === "/api/instances") {
+      return topology.failFleet
+        ? Promise.reject(new Error("La API respondió con el código 503."))
+        : Promise.resolve(response(topology.fleet));
     }
+    if (url === "/ready") return Promise.resolve(response(topology.readiness));
+    if (url === "/instance.json") return Promise.resolve(response(topology.web));
 
     return Promise.resolve(responses[responseIndex++]);
   });
