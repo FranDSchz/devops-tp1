@@ -53,11 +53,26 @@ Las pruebas se ejecutan con **Vitest** en aislamiento total, desacopladas de ins
 * **Dependencia Saludable:** Responde HTTP 200 cuando el mock de Redis responde `PONG`.
 * **Fallo de Dependencia:** Responde HTTP 503 cuando la conexión a Redis falla.
 
+### 2.4. Pruebas del Registro de Flota (`src/routes/instances.test.ts` y `src/store/instances.test.ts`)
+
+| Modulo / Endpoint | Caso de Prueba | Comportamiento Esperado |
+| :--- | :--- | :--- |
+| `GET /api/instances` | Flota completa | Responde HTTP 200 con `servedBy`, `count`, `expected`, `heartbeatTtlMs` e `instances`. |
+| `GET /api/instances` | Registro vacio | Responde HTTP 200 con `count: 0` e `instances: []` cuando todas las replicas vencieron su TTL. |
+| `GET /api/instances` | Redis inaccesible | Responde HTTP 503 con un mensaje de error. |
+| `GET /health` | Metricas de runtime | Expone `startedAt`, `uptimeSeconds` y `memoryRss` ademas del identificador de instancia. |
+| Store | Latido registrado | `ZADD` en `fleet:api` y `HSET` en `fleet:api:data` dentro de un unico `pipeline`. |
+| Store | Listado | Devuelve las instancias vivas ordenadas por id, con `uptimeSeconds` calculado y `lastSeenMs` leido del score. |
+| Store | TTL vencido | Excluye la instancia atrasada y purga su entrada en el ZSET **y** en el HASH. |
+| Store | Entrada huerfana | Descarta y elimina el indice sin payload asociado. |
+| Store | Payload corrupto | Trata el JSON invalido como entrada ausente y la elimina. |
+| Store | `FLEET_SIZE` | Valida el valor por defecto (3) y descarta valores invalidos. |
+
 ---
 
 ## 3. Pruebas Unitarias del Frontend (`apps/web`)
 
-Implementadas mediante **Vitest** + **React Testing Library** + **jsdom** en `apps/web/src/App.test.tsx`:
+Implementadas mediante **Vitest** + **React Testing Library** + **jsdom** en `apps/web/src/App.test.tsx` y `apps/web/src/components/InstancePanel.test.tsx`:
 
 1. **Carga y Resumen:** Renderizado inicial, estado de carga (`Cargando incidentes`), consumo de `/api/incidents` y actualización del contador de métricas.
 2. **Estado Vacío:** Visualización adecuada del mensaje cuando no hay incidentes registrados.
@@ -65,4 +80,6 @@ Implementadas mediante **Vitest** + **React Testing Library** + **jsdom** en `ap
 4. **Transición de Estados:** Avance de ciclo de vida del incidente mediante PATCH `/api/incidents/:id` al presionar "Mover a En progreso".
 5. **Eliminación:** Borrado de incidente mediante DELETE `/api/incidents/:id` y remoción inmediata del DOM.
 6. **Manejo de Errores y Resiliencia:** Visualización de mensajes de error de backend (ej. Redis no disponible HTTP 503) y reintento exitoso con el botón "Reintentar".
-7. **Trazabilidad de Réplicas (Badge):** Consulta asincrónica a `/instance.json` y `/health` para mostrar el nodo Web y API que atendieron la solicitud.
+7. **Panel de Réplicas:** Muestra una tarjeta por instancia registrada, destaca la que sirvió la sesión ("sirviendo tu sesión") y expone uptime, memoria RSS, nodo y versión.
+8. **Flota degradada:** Advierte cuando la cantidad de réplicas en línea es menor a la esperada y sigue listando las disponibles.
+9. **Resiliencia del panel:** Un fallo en `/api/instances` no interrumpe la lista de incidentes y ofrece reintento.

@@ -39,87 +39,21 @@ Cada incidente cuenta con atributos tipados: `id` (UUID), `title`, `service`, `s
 
 OpsBoard implementa una arquitectura desacoplada en microservicios contenerizados, aplicando el patrón **Dual-Homed Reverse Proxy**, **Defensa en Profundidad** y la política de **Same-Origin** (Zero CORS) mediante Nginx.
 
-El proyecto cuenta con dos entornos de ejecución:
-1. **Entorno Local (Desarrollo & Resiliencia Multi-Réplica):** Ejecuta 3 réplicas de Web, 3 réplicas de API, Redis con persistencia y Nginx balanceando con Round-Robin y conmutación automática ante fallos en menos de 2 segundos.
-2. **Entorno Cloud (Producción en AWS EC2):** Ejecuta el stack productivo en una máquina virtual Linux en AWS consumiendo artefactos inmutables publicados en GitHub Container Registry (GHCR), protegido perimetralmente con Security Groups.
+El proyecto cuenta con dos entornos de ejecución, con topología idéntica:
 
-### 1. Topología Local Multi-Réplica (Alta Disponibilidad y Tolerancia a Fallos)
+| | Entorno local | Entorno cloud (AWS EC2) |
+| --- | --- | --- |
+| Entrada | Nginx en `:8080` | Nginx en `:80` detrás de Security Group |
+| Réplicas web | 3 | 3 |
+| Réplicas API | 3 | 3 |
+| Persistencia | Redis 7 Alpine (`redis-data`) | Redis 7 Alpine (`redis-cloud-data`) |
+| Imágenes | Build local | Exclusivamente `ghcr.io/frandschz/opsboard-*` |
+| Comando | `docker compose up --build` | `docker compose -f docker-compose.cloud.yml up -d` |
 
-```mermaid
-flowchart TD
-    Client["Cliente / Navegador Web"] -- "HTTP :8080" --> NGINX["opsboard-nginx<br>(Reverse Proxy & Load Balancer)"]
+Los diagramas de topología, el modelo de datos en Redis y la configuración de failover están en [docs/architecture.md](docs/architecture.md).
 
-    subgraph NetFront["Red Docker: frontend (Aislada)"]
-        UP_WEB["upstream web_upstream<br>(Round-Robin)"]
-        W1["opsboard-web-1 (:80)"]
-        W2["opsboard-web-2 (:80)"]
-        W3["opsboard-web-3 (:80)"]
-        UP_WEB --> W1 & W2 & W3
-    end
+### Pipeline de Entrega Continua y Despliegue Inmutable
 
-    subgraph NetBack["Red Docker: backend (Privada)"]
-        UP_API["upstream api_upstream<br>(Round-Robin + Failover &lt;2s)"]
-        A1["opsboard-api-1 (:3000)"]
-        A2["opsboard-api-2 (:3000)"]
-        A3["opsboard-api-3 (:3000)"]
-        
-        REDIS[("opsboard-redis<br>(Redis 7 Alpine :6379)")]
-        VOL[("Volumen Persistente<br>redis-data -> /data")]
-        
-        UP_API --> A1 & A2 & A3
-        A1 & A2 & A3 -- "TCP :6379" --> REDIS
-        REDIS --- VOL
-    end
-
-    NGINX -- "Path / (Activos SPA y /instance.json)" --> UP_WEB
-    NGINX -- "Path /api/*, /health, /ready, /whoami" --> UP_API
-```
-
-### 2. Topología Cloud en Producción (AWS EC2 + GHCR) — Paridad Dev/Prod Total
-
-```mermaid
-flowchart TD
-    Internet["Internet / Clientes Públicos"] -- "HTTP :80" --> SG["AWS Security Group: opsboard-sg<br>(Inbound: TCP 80 & 22 | Bloqueados: 3000 & 6379)"]
-
-    subgraph AWS["Instancia AWS EC2 (t3.micro - Ubuntu 24.04 LTS | IP: 3.17.23.16)"]
-        SG --> C_NGINX["opsboard-cloud-nginx<br>(Nginx Alpine :80)"]
-
-        subgraph DockerCloudFront["Red Docker: frontend (Aislada)"]
-            C_UP_WEB["upstream web_upstream<br>(Round-Robin)"]
-            CW1["opsboard-cloud-web-1 (:80)"]
-            CW2["opsboard-cloud-web-2 (:80)"]
-            CW3["opsboard-cloud-web-3 (:80)"]
-            C_UP_WEB --> CW1 & CW2 & CW3
-        end
-
-        subgraph DockerCloudBack["Red Docker: backend (Privada / Aislada de Internet)"]
-            C_UP_API["upstream api_upstream<br>(Round-Robin + Failover &lt;2s)"]
-            CA1["opsboard-cloud-api-1 (:3000)"]
-            CA2["opsboard-cloud-api-2 (:3000)"]
-            CA3["opsboard-cloud-api-3 (:3000)"]
-            
-            C_REDIS[("opsboard-cloud-redis<br>(Redis 7 Alpine :6379)")]
-            C_VOL[("Volumen Persistente<br>redis-cloud-data -> /data")]
-            
-            C_UP_API --> CA1 & CA2 & CA3
-            CA1 & CA2 & CA3 -- "TCP :6379" --> C_REDIS
-            C_REDIS --- C_VOL
-        end
-
-        C_NGINX -- "Path / (Activos SPA y /instance.json)" --> C_UP_WEB
-        C_NGINX -- "Path /api/*, /health, /ready, /whoami" --> C_UP_API
-    end
-
-    subgraph GHCR["GitHub Container Registry (Inmutable)"]
-        GHCR_WEB[("ghcr.io/frandschz/opsboard-web:latest")]
-        GHCR_API[("ghcr.io/frandschz/opsboard-api:latest")]
-    end
-
-    GHCR_WEB -.->|"docker compose pull"| CW1 & CW2 & CW3
-    GHCR_API -.->|"docker compose pull"| CA1 & CA2 & CA3
-```
-
-### 3. Pipeline de Entrega Continua y Despliegue Inmutable
 
 ```mermaid
 flowchart LR
@@ -128,7 +62,7 @@ flowchart LR
     end
 
     subgraph CI_CD["GitHub Actions"]
-        PR --> CI["TypeCheck + Vitest<br>(31 Tests Aprobados)"]
+        PR --> CI["TypeCheck + Vitest<br>(54 Tests Aprobados)"]
         CI --> SEC["CodeQL SAST + Trivy SCA/Secrets"]
         SEC -- "Merge a 'main'" --> Build["Multi-Stage Build"]
         Build --> Push["docker push a GHCR"]
@@ -146,21 +80,20 @@ flowchart LR
 
 La arquitectura completa con proxy y réplicas se ejecuta localmente mediante Docker Compose. En Cloud (AWS EC2), se ejecuta el stack productivo (`docker-compose.cloud.yml`) consumiendo exclusivamente las imágenes inmutables de GHCR.
 
-## Decisiones tecnicas
+## Stack
 
-| Area | Decision |
+| Area | Tecnologia |
 | --- | --- |
 | Frontend | React, Vite y TypeScript |
 | API | Fastify y TypeScript |
 | Almacenamiento | Redis 7 Alpine con volumen persistente |
 | Reverse proxy | Nginx con Round-Robin y Failover |
-| Orquestacion local | Docker Compose |
-| Tests | Vitest (31 pruebas unitarias aprobadas) |
-| SAST | CodeQL oficial de GitHub |
-| SCA y Secrets | Aqua Trivy |
+| Tests | Vitest (54 pruebas unitarias aprobadas) |
+| Seguridad | CodeQL (SAST) y Trivy (SCA y Secrets) |
 | Registry | GitHub Container Registry (GHCR) |
-| Despliegue Cloud | AWS EC2 (Ubuntu 24.04 LTS en t3.micro) con Docker Compose |
-| Flujo de trabajo | GitHub Flow con protección de rama `main` |
+| Cloud | AWS EC2 (Ubuntu 24.04 LTS en t3.micro) con Docker Compose |
+
+El detalle de cada decision y su motivo esta en [docs/decisions.md](docs/decisions.md).
 
 ## Organizacion del repositorio
 
@@ -203,6 +136,7 @@ La aplicacion queda disponible en <http://localhost:8080>. Nginx expone el unico
 
 - Redis se ejecuta en su propio contenedor con un volumen persistente.
 - Cada nodo API responde el header `X-Instance-ID` y el endpoint `/health` devuelve la instancia que lo atendio (permite demostrar el balanceo).
+- Cada nodo API registra un latido en Redis y `GET /api/instances` devuelve la flota completa; la web lo muestra en el panel "Réplicas del servicio".
 
 Para detener el stack: `docker compose down` (agregar `-v` para borrar tambien el volumen de Redis).
 
@@ -238,7 +172,11 @@ Solo responden las instancias activas (`api-1` y `api-3`).
 docker start opsboard-api-2
 ```
 
-Para inspeccionar los datos en Redis ver [cheatsheet-redis.md](docs/cheatsheet-redis.md).
+Para inspeccionar los datos en Redis ver [cheatsheet-redis.md](docs/cheatsheet-redis.md). Para consultar la flota en vivo:
+
+```bash
+curl -s http://localhost:8080/api/instances | jq .
+```
 
 ## Despliegue en Cloud (AWS EC2) — Paridad Total Multi-Réplica
 
@@ -260,24 +198,18 @@ La solución se encuentra desplegada y operativa en una máquina virtual Linux e
   - Frontend SPA: [http://3.17.23.16/](http://3.17.23.16/)
   - Healthcheck API: [http://3.17.23.16/health](http://3.17.23.16/health)
   - Readiness (Redis ping): [http://3.17.23.16/ready](http://3.17.23.16/ready)
+  - Flota de réplicas API: [http://3.17.23.16/api/instances](http://3.17.23.16/api/instances)
   - Identidad Web: [http://3.17.23.16/instance.json](http://3.17.23.16/instance.json)
   - API REST Incidentes: [http://3.17.23.16/api/incidents](http://3.17.23.16/api/incidents)
 - Para más detalles sobre el aprovisionamiento, firewall y runbook operativo, ver [docs/cloud-deployment.md](docs/cloud-deployment.md).
 
 ## Colaboracion
 
-- Cada cambio comienza con un Issue.
-- Cada Issue se implementa en una rama corta.
-- Los cambios ingresan a `main` mediante Pull Request.
-- Cada Pull Request necesita revision de al menos otro integrante.
-- `main` debe mantenerse en estado estable.
-- Todos los integrantes deben comprender la arquitectura completa para el coloquio.
+Cada cambio comienza con un Issue, se implementa en una rama corta y entra a `main` mediante Pull Request con al menos una revision. El detalle esta en [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Consultar [CONTRIBUTING.md](CONTRIBUTING.md) antes de comenzar una tarea.
 
 ## Documentacion
 
-- [Requisitos y criterios de evaluacion](docs/requirements.md)
 - [Arquitectura del sistema](docs/architecture.md)
 - [Decisiones del proyecto](docs/decisions.md)
 - [Roadmap de entregas](docs/roadmap.md)
@@ -285,17 +217,6 @@ Consultar [CONTRIBUTING.md](CONTRIBUTING.md) antes de comenzar una tarea.
 - [Estrategia de seguridad, SAST y SCA](docs/security.md)
 - [Publicacion y uso de imagenes en GHCR](docs/registry.md)
 - [Procedimiento de despliegue en Cloud (AWS EC2)](docs/cloud-deployment.md)
-- [Evidencias de balanceo, tolerancia a fallos y Redis](docs/evidencia-m2.md)
 - [Cheatsheet de consultas y operaciones en Redis](docs/cheatsheet-redis.md)
-- [Guion de demostracion y machete del coloquio](docs/guion-coloquio.md)
 - [Informe tecnico de entrega](docs/report.md)
-
-## Entregables previstos
-
-- Aplicacion funcionando durante el coloquio.
-- Repositorio grupal publico.
-- Imagenes publicadas en GHCR mediante GitHub Actions.
-- Aplicacion desplegada en un servicio cloud desde el Registry.
-- Informe o presentacion con resultados, dificultades y mejoras futuras.
-- Demostracion de Redis, balanceo y tolerancia a la caida de una instancia.
 
