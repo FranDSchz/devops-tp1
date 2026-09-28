@@ -39,7 +39,7 @@ El roadmap organiza resultados, no asignaciones personales. Los responsables y r
 - [x] Ejecutar prueba de despliegue desde GHCR.
 - [x] Completar el despliegue externo en AWS EC2 (`http://3.17.23.16`).
 - [x] Preparar informe tecnico formal (`docs/report.md`).
-- [x] Crear un guion de demostracion y machete del coloquio (`docs/guion-coloquio.md`).
+- [x] Crear un guion de demostracion y machete del coloquio
 - [x] Ensayar el coloquio con todos los integrantes.
 
 ## Principio de priorizacion

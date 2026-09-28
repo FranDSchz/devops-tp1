@@ -1,184 +1,76 @@
-## Redis
+# Cheatsheet de Redis — OpsBoard
 
-> **En OpsBoard, Redis corre dentro de un contenedor de Docker** (servicio `redis` del `docker compose`), por lo que no hace falta instalarlo en la maquina local. Las siguientes secciones de instalacion son referencia general para usar Redis fuera del proyecto.
+> Redis corre dentro de un contenedor de Docker (servicio `redis` del compose), no en la maquina local. Por eso no hay nada que instalar: se opera con `docker exec`.
 
-### Instalarlo con Docker (referencia general)
-```
-docker run -d --name redis -p 6379:6379 redis:7-alpine
-```
-- Si no tenes instalado redis-cli
-```
-docker exec -it redis redis-cli
-```
-- Si tenes redis-cli
-```
-redis-cli -h 127.0.0.1 -p 6379
-```
+```bash
+# Local
+docker exec -it opsboard-redis redis-cli
 
-### Activarlo
-```
-redis-server
-```
-- Hay que dejarlo activo
+# Cloud
+docker exec -it opsboard-cloud-redis redis-cli
 
-### Ingresar al servidor
-``` 
-redis-cli 
-```
-- Para salir
-```
-quit
-```
-
-### Agregar y obtener valores claves:valor
-- Agregar
-```
-set name kyle
-```
-- Obtener
-```
-get name
-```
-- Eliminar
-```
-del name
-```
-- Saber si existe (devuelve 1 si es verdadero y 0 si es falso)
-```
-exists name
-```
-- Obtenemos todos los valores claves
-```
-keys *
-```
-- Eliminamos todos los valores
-```
-flushall
-```
-
-### TTL (time to live)
-- Agregarle un tiempo de expiracion 
-```
-expire name 10 
-```
-- Ver cuanto tiempo le queda
-```
-ttl name
-```
-- Si es negativo ya no existe, si es constantemente -1 es porque no expira nunca
-- Para crear valores con tiempo de expiracion
-```
-setex name 10 kyle
-```
-
-### Crear arrays
-```
-lpush friends celeste
-```
-- Obtener los valores
-```
-lrange friends 0 -1
-```
-- Agregar un valor en la izquierda (al inicio)
-```
-lpush friends lauti
-```
-- Agregar un valor en la derecha (al final)
-```
-rpush friends franco
-```
-- Eliminar un elemento al inicio
-```
-pop friends
-```
-- Eliminar un elemento al final
-```
-rpop friends
-```
-
-### Sets
-```
-sadd hobbies "futbol"
-```
-- Ver todos los elementos dentro de un set
-```
-smembers hobbies
-```
-- Eliminar un elemento
-```
-srem hobbies "futbol"
-```
-- Para agregar
-```
-sadd hobbies "voley"
-```
-
-### Hashes
-```
-hset person name kyle
-```
-- Get the value of an object with the key
-```
-hget person name
-```
-- Get all keys and values
-```
-hgetall person
-```
-- Eliminar una clave
-```
-hdel person name
-```
-- Chequear si existe una key
-```
-hexists person name
+# Ver el log del contenedor
+docker logs opsboard-redis
 ```
 
 ---
 
-## OpsBoard - Inspeccion de datos (M2)
+## Incidentes
 
-Los incidentes se almacenan en Redis como **hashes**, con un **set indice** global que guarda las claves de todos los incidentes.
+Los incidentes se almacenan como **hashes**, con un **set indice** global que guarda las claves de todos los incidentes.
 
-### Ingresar al contenedor de Redis
-```
-docker exec -it opsboard-redis redis-cli
+| Operacion | Comando |
+| --- | --- |
+| Listar IDs | `SMEMBERS incidents` |
+| Ver un incidente | `HGETALL incident:<uuid>` |
+| Ver un campo | `HGET incident:<uuid> title` |
+| Cantidad | `SCARD incidents` |
+| Eliminar a mano | `DEL incident:<uuid>` + `SREM incidents incident:<uuid>` |
+| Limpiar todo | `FLUSHALL` (borra tambien el registro de flota) |
+
+Campos de cada incidente: `id`, `title`, `service`, `severity`, `status`, `createdAt`, `updatedAt`.
+
+> `KEYS *` esta bloqueante en Redis y no se usa en produccion. El listado de incidentes se resuelve con `SMEMBERS` sobre el set indice, en complejidad O(N) predecible.
+
+---
+
+## Flota de replicas
+
+Cada replica de la API escribe un latido cada 5 segundos. El TTL es **logico**, no un `EXPIRE` de Redis: se apoya en el score del ZSET.
+
+| Estructura | Contenido |
+| --- | --- |
+| ZSET `fleet:api` | member = id de instancia, score = timestamp del ultimo latido |
+| HASH `fleet:api:data` | campo = id de instancia, valor = JSON con metricas del proceso |
+
+| Operacion | Comando |
+| --- | --- |
+| Ver la flota con sus latidos | `ZRANGE fleet:api 0 -1 WITHSCORES` |
+| Solo las vivas (TTL 15 s) | `ZRANGEBYSCORE fleet:api <epoch-actual-15000> +inf` |
+| Ver las caidas | `ZRANGEBYSCORE fleet:api -inf <epoch-actual-15000>` |
+| Metricas de una replica | `HGET fleet:api:data api-1` |
+| Ver todas las metricas | `HGETALL fleet:api:data` |
+| Cuantas replicas hay | `ZCARD fleet:api` |
+
+El JSON de cada replica incluye `id`, `role`, `startedAt`, `memoryRss`, `heapUsed`, `node`, `nodeVersion` y `pid`.
+
+Una replica que se detiene deja de refrescar su score, deja de aparecer en `ZRANGEBYSCORE` y **el endpoint que la consume la purga** (`ZREM` + `HDEL`) al detectarla. Se puede reproducir:
+
+```bash
+docker stop opsboard-api-2
+sleep 16
+curl -s http://localhost:8080/api/instances | jq '.instances[].id'   # ya no aparece api-2
+docker start opsboard-api-2
 ```
 
-### Listar todos los IDs de incidentes
-```
-SMEMBERS incidents
-```
-Devuelve claves del tipo `incident:<uuid>`.
+---
 
-### Ver un incidente completo (hash)
-```
-HGETALL incident:<uuid>
-```
+## Diagnostico general
 
-### Ver un campo puntual
-```
-HGET incident:<uuid> title
-```
-Campos disponibles: `id`, `title`, `service`, `severity`, `status`, `createdAt`, `updatedAt`.
-
-### Ver TODAS las claves
-```
-KEYS incident:*
-```
-
-### Cantidad de incidentes
-```
-SCARD incidents
-```
-
-### Eliminar un incidente a mano
-```
-DEL incident:<uuid>
-SREM incidents incident:<uuid>
-```
-
-### Limpiar toda la base
-```
-FLUSHALL
+```bash
+PING                 # PONG
+INFO memory          # uso de memoria del servidor
+DBSIZE               # cantidad total de claves
+INFO keyspace        # distribucion por base
+CONFIG GET appendonly  # durability (appendonly yes)
 ```

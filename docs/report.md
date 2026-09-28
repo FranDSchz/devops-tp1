@@ -128,9 +128,9 @@ flowchart LR
 ```
 
 * **Verificación Estática:** Comprobación estricta de tipos mediante TypeScript (`tsc --noEmit`), reportando 0 errores en los paquetes `apps/api` y `apps/web`.
-* **Pruebas Unitarias:** Suite automatizada de 31 pruebas unitarias implementadas con Vitest:
-  * Frontend: 7 pruebas unitarias aprobadas que validan renderizado reactivo, carga asincrónica, transiciones de estado y resiliencia ante errores.
-  * Backend: 24 pruebas de endpoints (`/ready`, `/health`, `/whoami`, CRUD de incidentes) y lógica de almacenamiento con dobles de prueba.
+* **Pruebas Unitarias:** Suite automatizada de 54 pruebas unitarias implementadas con Vitest:
+  * Frontend: 17 pruebas que validan renderizado reactivo, carga asincrónica, transiciones de estado, resiliencia ante errores y el panel de réplicas.
+  * Backend: 37 pruebas de endpoints (`/ready`, `/health`, `/whoami`, `/api/instances`, CRUD de incidentes) y lógica de almacenamiento con dobles de prueba.
 * **Pipelines Automatizados (GitHub Actions):** Flujos continuos que integran instalación determinista (`npm ci`), ejecución de pruebas, análisis de seguridad SAST (CodeQL), escaneo de vulnerabilidades/secretos (Trivy), y publicación inmutable de imágenes en GHCR con badges de estado en el `README.md`.
 
 ### 3.4. Despliegue en Cloud desde el Registry (AWS EC2) — Paridad Dev/Prod Total
@@ -182,11 +182,11 @@ flowchart LR
 
 | Componente del Sistema | Implementación Técnica | Estado de Verificación | Evidencia Técnica Asociada |
 | :--- | :--- | :---: | :--- |
-| **Aplicación Web (Frontend)** | React 19 + TypeScript + Vite, empaquetado en Nginx alpine. | **Verificado** | 7 pruebas unitarias aprobadas, typecheck sin errores, build reproducible. |
-| **API REST (Backend)** | Fastify 5 + TypeScript, arquitectura stateless. | **Verificado** | Endpoints operativos (`/api/incidents`, `/health`, `/ready`, `/whoami`), typecheck sin errores. |
-| **Persistencia (Redis)** | Redis 7 Alpine, estructuras Hash + Set, volumen persistente. | **Verificado** | Procedimiento de consulta CLI documentado en `docs/cheatsheet-redis.md` y verificado en `docs/evidencia-m2.md`. |
-| **Proxy y Balanceo Local** | Nginx con Round-Robin, 3 nodos web y 3 nodos API. | **Verificado** | Trazabilidad por `X-Instance-ID` y tolerancia a la detención de nodos documentada en `docs/evidencia-m2.md`. |
-| **Automatización CI/CD** | GitHub Actions para tests, linting y typecheck. | **Verificado** | Pipeline `.github/workflows/ci.yml` con 31 tests unitarios aprobados, typecheck y build validado en PR #20. |
+| **Aplicación Web (Frontend)** | React 19 + TypeScript + Vite, empaquetado en Nginx alpine. | **Verificado** | Suite de pruebas Vitest aprobada, typecheck sin errores, build reproducible. |
+| **API REST (Backend)** | Fastify 5 + TypeScript, arquitectura stateless con registro de flota. | **Verificado** | Endpoints operativos (`/api/incidents`, `/api/instances`, `/health`, `/ready`, `/whoami`), typecheck sin errores. |
+| **Persistencia (Redis)** | Redis 7 Alpine, estructuras Hash + Set + ZSET+HASH para flota, volumen persistente. | **Verificado** | Procedimiento de consulta CLI documentado en `docs/cheatsheet-redis.md`. |
+| **Proxy y Balanceo Local** | Nginx con Round-Robin, 3 nodos web y 3 nodos API, failover < 2 s. | **Verificado** | Trazabilidad por `X-Instance-ID` y comprobación de tolerancia a fallos mediante `curl` en local. |
+| **Automatización CI/CD** | GitHub Actions para tests, linting y typecheck. | **Verificado** | Pipeline `.github/workflows/ci.yml` con suite de Vitest aprobada, typecheck y build validado. |
 | **Seguridad (SAST / SCA)** | Escaneo estático de código, dependencias y secretos. | **Verificado** | Pipeline `.github/workflows/security.yml` (CodeQL SAST + Trivy SCA/Secret scanning); documentado en `docs/security.md`. |
 | **Registro de Imágenes** | GitHub Container Registry (GHCR) para imágenes de Web y API. | **Verificado** | Pipeline `.github/workflows/release-ghcr.yml` automatizado con tags semánticos y SHA; documentado en `docs/registry.md`. |
 | **Despliegue en Cloud** | Stack Docker Compose en AWS EC2 consumiendo imágenes de GHCR. | **Verificado** | Desplegado en vivo en `http://3.17.23.16`, endpoints `/health`, `/ready` y persistencia Redis validados; ver `docs/cloud-deployment.md`. |

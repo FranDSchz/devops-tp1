@@ -22,6 +22,7 @@ services:
       REDIS_PORT: 6379
       PORT: 3000
       INSTANCE_ID: api-cloud-1
+      FLEET_SIZE: 3
     depends_on:
       redis:
         condition: service_healthy
@@ -42,6 +43,7 @@ services:
       REDIS_PORT: 6379
       PORT: 3000
       INSTANCE_ID: api-cloud-2
+      FLEET_SIZE: 3
     depends_on:
       redis:
         condition: service_healthy
@@ -62,6 +64,7 @@ services:
       REDIS_PORT: 6379
       PORT: 3000
       INSTANCE_ID: api-cloud-3
+      FLEET_SIZE: 3
     depends_on:
       redis:
         condition: service_healthy

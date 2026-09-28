@@ -5,7 +5,12 @@ import {
   listIncidents,
   updateIncidentStatus,
 } from "./api/incidents";
+import { getReadiness, getWebInstance, listFleet } from "./api/instances";
+import { InstancePanel } from "./components/InstancePanel";
 import type { Incident, IncidentStatus, Severity } from "./types/incident";
+import type { Fleet, Readiness } from "./types/instance";
+
+const TOPOLOGY_POLL_MS = 3000;
 
 const STATUS_FLOW: Record<IncidentStatus, IncidentStatus | null> = {
   open: "in_progress",
@@ -38,25 +43,37 @@ function App() {
   const [pendingIncidentId, setPendingIncidentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [webInstance, setWebInstance] = useState<string | null>(null);
-  const [apiInstance, setApiInstance] = useState<string | null>(null);
+  const [fleet, setFleet] = useState<Fleet | null>(null);
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
+  const [topologyError, setTopologyError] = useState<string | null>(null);
+  const [isTopologyLoading, setIsTopologyLoading] = useState(false);
+  const [topologyUpdatedAt, setTopologyUpdatedAt] = useState<number | null>(null);
 
-  const fetchInstances = useCallback(async () => {
-    try {
-      const res = await fetch("/instance.json");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.instance) setWebInstance(data.instance);
-      }
-    } catch {
+  const fetchTopology = useCallback(async () => {
+    setIsTopologyLoading(true);
+    const [fleetResult, readinessResult, webResult] = await Promise.allSettled([
+      listFleet(),
+      getReadiness(),
+      getWebInstance(),
+    ]);
+
+    if (fleetResult.status === "fulfilled") {
+      setFleet(fleetResult.value);
+      setTopologyError(null);
+    } else {
+      setTopologyError(fleetResult.reason instanceof Error ? fleetResult.reason.message : null);
     }
-    try {
-      const res = await fetch("/health");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.instance) setApiInstance(data.instance);
-      }
-    } catch {
+
+    if (readinessResult.status === "fulfilled") {
+      setReadiness(readinessResult.value);
     }
+
+    if (webResult.status === "fulfilled" && webResult.value.instance) {
+      setWebInstance(webResult.value.instance);
+    }
+
+    setTopologyUpdatedAt(Date.now());
+    setIsTopologyLoading(false);
   }, []);
 
   const fetchIncidents = useCallback(async () => {
@@ -69,12 +86,20 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-    await fetchInstances();
-  }, [fetchInstances]);
+  }, []);
 
   useEffect(() => {
     void fetchIncidents();
   }, [fetchIncidents]);
+
+  useEffect(() => {
+    void fetchTopology();
+    const timer = setInterval(() => {
+      void fetchTopology();
+    }, TOPOLOGY_POLL_MS);
+
+    return () => clearInterval(timer);
+  }, [fetchTopology]);
 
   const summary = useMemo(
     () => ({
@@ -165,14 +190,36 @@ function App() {
           <div className="api-state" title="La interfaz consume la API REST de OpsBoard">
             <span>Integración API</span>
             <strong>REST + Redis</strong>
-            {webInstance && apiInstance && (
-              <small>{`Web ${webInstance} · API ${apiInstance}`}</small>
+            {(webInstance || fleet?.servedBy) && (
+              <small>
+                {`Web ${webInstance ?? "?"} · API ${fleet?.servedBy ?? "?"}`}
+              </small>
             )}
           </div>
         </div>
       </header>
 
       <main>
+        <InstancePanel
+          fleet={fleet}
+          readiness={readiness}
+          webInstance={webInstance}
+          isLoading={isTopologyLoading}
+          lastUpdatedMs={topologyUpdatedAt}
+          onRefresh={() => void fetchTopology()}
+        />
+        {topologyError && (
+          <div className="alert" role="alert">
+            <div>
+              <strong>No pudimos consultar la topología</strong>
+              <span>{topologyError}</span>
+            </div>
+            <button type="button" onClick={() => void fetchTopology()}>
+              Reintentar
+            </button>
+          </div>
+        )}
+
         <section className="summary-grid" aria-label="Resumen de incidentes">
           <SummaryCard label="Total" value={summary.total} tone="neutral" />
           <SummaryCard label="Activos" value={summary.active} tone="blue" />

@@ -116,16 +116,19 @@ flowchart TD
 * **Stack:** Fastify 5, TypeScript.
 * **Función:** Validación estricta de esquemas, lógica de negocio y mediación con Redis.
 * **Endpoints de Diagnóstico y Salud:**
-  * `GET /health`: Estado del proceso y retorno del identificador de réplica (`{"status":"ok","instance":"<ID>"}`).
-  * `GET /ready`: Diagnóstico de dependencia externa mediante `redis.ping()`; devuelve `HTTP 200` si Redis responde `PONG` y `HTTP 503` en caso de fallo.
+  * `GET /health`: Estado del proceso con `uptime`, `startedAt` y `memoryRss`, más el identificador de réplica (`{"status":"ok","instance":"<ID>"}`).
+  * `GET /ready`: Diagnóstico de dependencia externa mediante `redis.ping()`; devuelve `HTTP 200` con `redis:"ok"` si Redis responde `PONG` y `HTTP 503` con `redis:"unreachable"` en caso de fallo.
   * `GET /whoami`: Identificador de instancia activa.
+* **Registro de flota:**
+  * `GET /api/instances`: Devuelve todas las réplicas vivas (`servedBy`, `count`, `expected`, `heartbeatTtlMs` e `instances`). Responde `HTTP 503` si el registro no se puede leer.
 * **Trazabilidad:** Inyecta en cada respuesta el encabezado HTTP `X-Instance-ID`.
 
 ### 4.3. Motor de Persistencia (`Redis 7 Alpine`)
-* **Función:** Almacenamiento clave-valor estructurado para el estado compartido de los incidentes.
+* **Función:** Almacenamiento clave-valor estructurado para el estado compartido de los incidentes y para el registro de réplicas.
 * **Modelo de Datos:**
   * **Hash (`incident:<id>`):** Atributos tipados del incidente (`id`, `title`, `service`, `severity`, `status`, `createdAt`, `updatedAt`).
   * **Set (`incidents`):** Índice global de identificadores para listado eficiente en complejidad predecible ($O(N)$ del set con `SMEMBERS`), evitando el comando antipatrón bloqueante `KEYS *`.
+  * **ZSet (`fleet:api`) + Hash (`fleet:api:data`):** Registro de instancias. Cada réplica escribe un latido con `ZADD` + `HSET` dentro de un `pipeline` (escritura atómica) cada 5 segundos, y el score del ZSET funciona como **TTL lógico**: una instancia cuyo score quedó atrasado se considera caída. `GET /api/instances` resuelve la flota viva con `ZRANGEBYSCORE` + `HMGET` y, en el mismo pipeline, purga con `ZREM` + `HDEL` las entradas vencidas o huérfanas, de modo que ninguna estructura crece de forma indefinida.
 * **Durabilidad:** Modo `appendonly yes` vinculado a volumen persistente nombrado (`redis-data` en local, `redis-cloud-data` en cloud).
 
 ### 4.4. Proxy Inverso y Balanceador de Carga (`Nginx`)
@@ -157,6 +160,14 @@ flowchart TD
    ```bash
    docker start opsboard-api-2
    ```
+
+4. **Comprobación del registro de flota:** el panel "Réplicas del servicio" de la web y el endpoint `GET /api/instances` reflejan la caída sin necesidad de consultar cada nodo:
+   ```bash
+   docker stop opsboard-api-2
+   sleep 16
+   curl -s http://localhost:8080/api/instances | jq '.count, .instances[].id'   # 2 y solo api-1, api-3
+   ```
+   *Resultado:* la réplica detenida deja de refrescar su latido, su score en `fleet:api` envejece y desaparece de la lista, que pasa de `3` a `2` en menos de 15 segundos.
 
 ---
 

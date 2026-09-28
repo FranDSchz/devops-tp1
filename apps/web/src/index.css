@@ -130,6 +130,241 @@ h1 {
   white-space: nowrap;
 }
 
+.instance-panel {
+  padding: 24px;
+  border: 1px solid #e2e8f2;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(36, 53, 84, 0.07);
+}
+
+.instance-panel__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.instance-panel__title {
+  margin-top: 4px;
+  color: #172033;
+  font-size: 1.3rem;
+  letter-spacing: -0.02em;
+}
+
+.instance-panel__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.instance-panel__timestamp {
+  color: #7b8697;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-pill--up {
+  color: #11643f;
+  background: #e2f5eb;
+}
+
+.status-pill--down {
+  color: #982f2f;
+  background: #fee3e3;
+}
+
+.fleet-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #edf1f6;
+  border-radius: 12px;
+  background: #f9fbfe;
+}
+
+.fleet-summary__count {
+  color: #647087;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.fleet-summary__count strong {
+  color: #14855a;
+  font-size: 1.05rem;
+}
+
+.fleet-summary__count--down strong {
+  color: #d44343;
+}
+
+.fleet-summary__alert {
+  padding-left: 12px;
+  border-left: 1px solid #e2e8f2;
+  color: #8e4215;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.instance-panel__empty {
+  padding: 26px 4px;
+  color: #7c8798;
+  font-size: 0.86rem;
+  text-align: center;
+}
+
+.replica-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replica-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 15px 16px;
+  border: 1px solid #e2e8f2;
+  border-radius: 14px;
+  background: #fcfdff;
+}
+
+.replica-card--active {
+  border-color: #346be4;
+  background: #f5f8ff;
+  box-shadow: 0 0 0 3px rgba(52, 107, 228, 0.12);
+}
+
+.replica-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.replica-card__role {
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #2454a9;
+  background: #e5edff;
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.replica-card__serving {
+  color: #245ed7;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.replica-card__id {
+  overflow-wrap: anywhere;
+  color: #1c283d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.replica-card__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f6;
+}
+
+.replica-card__stats div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.replica-card__stats dt {
+  color: #8590a1;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.replica-card__stats dd {
+  overflow: hidden;
+  margin: 0;
+  color: #394861;
+  font-size: 0.8rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.web-replica {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 16px;
+  padding-top: 15px;
+  border-top: 1px solid #edf1f6;
+}
+
+.web-replica__label {
+  display: block;
+  color: #8590a1;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.web-replica__id {
+  display: block;
+  margin-top: 3px;
+  color: #1c283d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1rem;
+}
+
+.web-replica__note {
+  max-width: 480px;
+  color: #7c8798;
+  font-size: 0.76rem;
+  text-align: right;
+}
+
+.web-replica__note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+}
+
 main {
   display: grid;
   gap: 24px;
@@ -539,6 +774,29 @@ footer {
 
   .api-state {
     min-width: 0;
+  }
+
+  .instance-panel {
+    padding: 18px;
+  }
+
+  .instance-panel__header,
+  .instance-panel__meta,
+  .web-replica {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .instance-panel__meta {
+    gap: 10px;
+  }
+
+  .replica-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .web-replica__note {
+    text-align: left;
   }
 
   .summary-grid,

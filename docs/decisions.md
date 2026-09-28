@@ -56,3 +56,9 @@ Este documento registra las decisiones vigentes. Debe actualizarse cuando el equ
 
 **Motivo:** es suficiente para cinco integrantes y mantiene visible el aporte y la revision de cada cambio.
 
+## D-010 - Registro de flota de replicas
+
+**Decision:** publicar el estado de las replicas con un latido en Redis (ZSet `fleet:api` + Hash `fleet:api:data`) y exponerlo en `GET /api/instances`, en lugar de deducir la disponibilidad muestreando el balanceo desde el frontend.
+
+**Motivo:** el muestreo por HTTP no puede distinguir entre una replica caida y una que simplemente no recibio peticiones, por lo que no sirve como verificacion de disponibilidad. El latido con score como TTL logico es deterministico, se auto-purga y reutiliza el mismo Redis que ya es fuente de verdad del estado compartido. Evita ademas agregar un servicio de descubrimiento externo que seria overkill para esta escala.
+
