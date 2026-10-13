@@ -13,6 +13,12 @@ Este documento es una propuesta para discutir en equipo antes de crear el milest
 
 Descripcion sugerida: Despliegue blue-green con rollback de bajo riesgo y control de condiciones de carrera en la asignacion de un recurso con cupo unico.
 
+## Decisiones confirmadas
+
+- **Se trabaja sobre el proyecto existente (OpsBoard)**, no se arma una app o servicio nuevo para la demo.
+- **Tema 1 (blue-green)**: se reutiliza el stack completo de OpsBoard (web + api + Redis) de [infrastructure/compose](../infrastructure/compose). Blue y verde son dos instancias de ese mismo stack compartiendo Redis, no un servicio simplificado aparte.
+- **Tema 2 (concurrencia)**: el recurso con cupo unico es el modelo de incidentes que ya existe. El caso concreto propuesto es **asignar un incidente a un unico responsable** (agregar un campo tipo `assignedTo` al incidente existente): dos solicitudes simultaneas intentan tomar el mismo incidente y solo una debe ganarlo. No se modela un dominio nuevo.
+
 ## Desglose de Issues propuesto
 
 Formato pensado para el template `Tarea` (Area / Objetivo / Criterios de aceptacion / Dependencias) y los labels `area:*` existentes.
@@ -21,9 +27,9 @@ Formato pensado para el template `Tarea` (Area / Objetivo / Criterios de aceptac
 
 1. **Preparar entornos blue y verde en Docker Compose**
    - Area: Infraestructura (`area:infra`)
-   - Objetivo: tener dos stacks paralelos de web+api (blue y verde) compartiendo el mismo Redis, para poder alternar entre versiones.
+   - Objetivo: tener dos instancias paralelas del stack de OpsBoard (web+api, blue y verde) compartiendo el mismo Redis, para poder alternar entre versiones.
    - Criterios de aceptacion:
-     - [ ] Ambos entornos levantan con `docker compose` y responden en puertos/upstreams distintos.
+     - [ ] Ambos entornos levantan con `docker compose` (a partir del compose existente) y responden en puertos/upstreams distintos.
      - [ ] Comparten la misma instancia de Redis sin perder datos al alternar.
    - Dependencias: ninguna.
 
@@ -53,19 +59,19 @@ Formato pensado para el template `Tarea` (Area / Objetivo / Criterios de aceptac
 
 ### Tema 2 - Concurrencia y condiciones de carrera
 
-5. **Modelar el recurso con cupo unico - version vulnerable**
+5. **Endpoint "asignar incidente a un responsable" - version vulnerable**
    - Area: API (`area:api`)
-   - Objetivo: endpoint que asigna un recurso con cupo limitado (por ejemplo, asignar un incidente a un unico responsable, o reservar un slot) usando lectura-y-escritura sin control de concurrencia, para poder reproducir la condicion de carrera.
+   - Objetivo: agregar al modelo de incidente existente un campo de responsable (`assignedTo`) y un endpoint que lo asigne leyendo el incidente y escribiendolo de vuelta sin control de concurrencia, para poder reproducir la condicion de carrera.
    - Criterios de aceptacion:
-     - [ ] Endpoint documentado y reproducible.
-     - [ ] Se demuestra que dos solicitudes simultaneas pueden asignar el mismo cupo dos veces (bug reproducido).
+     - [ ] Endpoint documentado y reproducible sobre un incidente existente.
+     - [ ] Se demuestra que dos solicitudes simultaneas de asignacion sobre el mismo incidente pueden "ganar" las dos (bug reproducido).
    - Dependencias: ninguna.
 
 6. **Version protegida del mismo endpoint**
    - Area: API / Redis (`area:api`, `area:redis`)
-   - Objetivo: misma funcionalidad que el Issue 5 pero usando una operacion atomica de Redis (script Lua, `WATCH`+`MULTI`, o `SETNX`/`INCR` segun corresponda) para evitar la doble asignacion.
+   - Objetivo: misma funcionalidad que el Issue 5 pero usando una operacion atomica de Redis (script Lua, `WATCH`+`MULTI`, o `SETNX` sobre la clave del incidente, segun corresponda) para que solo una solicitud logre asignarse el incidente.
    - Criterios de aceptacion:
-     - [ ] Con las mismas dos solicitudes simultaneas del Issue 5, solo una obtiene el cupo.
+     - [ ] Con las mismas dos solicitudes simultaneas del Issue 5, solo una obtiene la asignacion.
      - [ ] La solucion elegida y su justificacion quedan documentadas.
    - Dependencias: Issue 5.
 
@@ -116,8 +122,7 @@ Hoy el pipeline llega hasta Continuous Integration + publicacion de imagenes en 
 
 ## Puntos a confirmar en equipo
 
-- [ ] Elegir el recurso concreto para el Tema 2 (ejemplo propuesto: asignar un incidente a un unico responsable, o reservar un "cupo" de atencion). Definir el modelo de datos exacto en Redis.
-- [ ] Decidir si el Tema 1 reutiliza el stack de OpsBoard (web+api+redis) o un servicio mas simple solo para la demo.
+- [ ] Definir el modelo de datos exacto en Redis para el campo `assignedTo` del incidente (clave, estructura, como se representa "sin asignar").
 - [ ] Confirmar si se agrupan los 11 Issues en un solo milestone M5 o se separan por tema (blue-green / concurrencia / CD).
 - [ ] Definir el mecanismo concreto de acceso SSH del workflow de CD a la instancia EC2 (secret existente vs. nuevo) sin exponer credenciales en logs.
 - [ ] Asignar responsables por Issue.
