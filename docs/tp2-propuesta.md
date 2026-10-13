@@ -84,20 +84,42 @@ Formato pensado para el template `Tarea` (Area / Objetivo / Criterios de aceptac
      - [ ] Incluye evidencia concreta (output del script) de la falla y de la mitigacion.
    - Dependencias: Issue 7.
 
+### Tema 3 - Continuous Delivery (automatizar el despliegue)
+
+Hoy el pipeline llega hasta Continuous Integration + publicacion de imagenes en GHCR (`release-ghcr.yml`); el paso a la instancia de AWS EC2 sigue siendo manual (SSH + `docker compose pull && up -d`, ver [docs/cloud-deployment.md](cloud-deployment.md)). Esto cierra ese gap y ademas sirve como el mecanismo que dispara el switch blue-green del Tema 1 en vez de ejecutarlo a mano.
+
+9. **Workflow de Continuous Delivery hacia Cloud**
+   - Area: CI/CD / Cloud (`area:ci`, `area:cloud`)
+   - Objetivo: extender el pipeline (o agregar uno nuevo) para que, tras publicar las imagenes en GHCR, se conecte a la instancia EC2 (por ejemplo via SSH action) y ejecute el deploy, reutilizando el switch blue-green del Issue 2 en vez del `docker compose pull && up -d` manual actual.
+   - Criterios de aceptacion:
+     - [ ] El workflow se dispara automaticamente tras el build (`workflow_run` o job encadenado) y tambien admite `workflow_dispatch` para control manual del momento del switch.
+     - [ ] El deploy ejecuta el mecanismo blue-green (Issue 2): sube la version nueva en el entorno inactivo, valida un healthcheck, y recien ahi mueve el proxy.
+     - [ ] Si el healthcheck falla, el workflow no mueve el proxy y deja documentado como revertir (reutiliza el rollback del Issue 3).
+     - [ ] Se actualiza `docs/cloud-deployment.md` para reflejar que el deploy es automatico y cual es el runbook manual de respaldo.
+   - Dependencias: Issues 1, 2 y 3.
+
+10. **Evidencia de un ciclo de CD de punta a punta**
+    - Area: Documentacion (`area:docs`)
+    - Objetivo: registrar (logs/capturas del workflow) un ciclo completo: commit a `main` -> CI -> build/push a GHCR -> deploy automatico en cloud con blue-green -> verificacion de que el sitio productivo sirve la version nueva.
+    - Criterios de aceptacion:
+      - [ ] Evidencia del ciclo completo disponible para el informe y la presentacion.
+    - Dependencias: Issue 9.
+
 ### Transversal
 
-9. **Guion y machete de la presentacion TP2**
-   - Area: Documentacion (`area:docs`)
-   - Objetivo: guion de demostracion para ambos temas (orden de la demo, comandos a ejecutar en vivo, que mostrar si algo falla).
-   - Criterios de aceptacion:
-     - [ ] Guion ensayado por al menos una persona del equipo.
-   - Dependencias: Issues 4 y 8.
+11. **Guion y machete de la presentacion TP2**
+    - Area: Documentacion (`area:docs`)
+    - Objetivo: guion de demostracion para los tres temas (orden de la demo, comandos a ejecutar en vivo, que mostrar si algo falla).
+    - Criterios de aceptacion:
+      - [ ] Guion ensayado por al menos una persona del equipo.
+    - Dependencias: Issues 4, 8 y 10.
 
 ## Puntos a confirmar en equipo
 
 - [ ] Elegir el recurso concreto para el Tema 2 (ejemplo propuesto: asignar un incidente a un unico responsable, o reservar un "cupo" de atencion). Definir el modelo de datos exacto en Redis.
 - [ ] Decidir si el Tema 1 reutiliza el stack de OpsBoard (web+api+redis) o un servicio mas simple solo para la demo.
-- [ ] Confirmar si se agrupan los 9 Issues en un solo milestone M5 o se separan en dos (uno por tema).
+- [ ] Confirmar si se agrupan los 11 Issues en un solo milestone M5 o se separan por tema (blue-green / concurrencia / CD).
+- [ ] Definir el mecanismo concreto de acceso SSH del workflow de CD a la instancia EC2 (secret existente vs. nuevo) sin exponer credenciales en logs.
 - [ ] Asignar responsables por Issue.
 - [ ] Revisar si faltan labels (por ejemplo, un label especifico para "concurrencia" o si alcanza con los `area:*` existentes).
 
