@@ -1,6 +1,10 @@
 # Propuesta de organizacion - TP2
 
-Este documento es una propuesta para discutir en equipo antes de crear el milestone y los Issues definitivos en GitHub. No reemplaza al roadmap de TP1 ([docs/roadmap.md](roadmap.md)); lo extiende con los dos temas nuevos a presentar.
+Organizacion del TP2 en Issues de GitHub. No reemplaza al roadmap de TP1 ([docs/roadmap.md](roadmap.md)); lo extiende con los temas nuevos a presentar.
+
+**Estado:** aprobado por el equipo. El milestone `M5` y los Issues de este documento se crean en GitHub siguiendo este desglose.
+
+> **Nota del profesor:** automatizar el despliegue a Cloud ya no es un requisito del TP2. El **Tema 3 (Continuous Delivery)** pasa a ser **opcional** (un plus si el equipo tiene tiempo), no bloquea la entrega ni la presentacion.
 
 ## Consigna
 
@@ -18,6 +22,22 @@ Descripcion sugerida: Despliegue blue-green con rollback de bajo riesgo y contro
 - **Se trabaja sobre el proyecto existente (OpsBoard)**, no se arma una app o servicio nuevo para la demo.
 - **Tema 1 (blue-green)**: se reutiliza el stack completo de OpsBoard (web + api + Redis) de [infrastructure/compose](../infrastructure/compose). Blue y verde son dos instancias de ese mismo stack compartiendo Redis, no un servicio simplificado aparte.
 - **Tema 2 (concurrencia)**: el recurso con cupo unico es el modelo de incidentes que ya existe. El caso concreto propuesto es **asignar un incidente a un unico responsable** (agregar un campo tipo `assignedTo` al incidente existente): dos solicitudes simultaneas intentan tomar el mismo incidente y solo una debe ganarlo. No se modela un dominio nuevo.
+
+## Resumen de tareas
+
+| # | Tema | Tarea | Que se hace (breve) | Prioridad |
+| --- | --- | --- | --- | --- |
+| 1 | Blue-Green | Entornos blue y verde | Levantar dos instancias del stack de OpsBoard (web+api) compartiendo el mismo Redis. | Obligatoria |
+| 2 | Blue-Green | Switch del proxy | Script para que Nginx pase de apuntar a blue a apuntar a verde sin cortar el servicio. | Obligatoria |
+| 3 | Blue-Green | Rollback | Volver a la version anterior ejecutando el switch inverso, con el tiempo que tarda medido. | Obligatoria |
+| 4 | Blue-Green | Diagrama y runbook | Dibujo de la arquitectura blue-green y los comandos exactos para repetir la demo. | Obligatoria |
+| 5 | Concurrencia | Asignacion vulnerable | Endpoint que asigna un incidente a un responsable sin control de concurrencia (se puede duplicar). | Obligatoria |
+| 6 | Concurrencia | Asignacion protegida | Mismo endpoint usando una operacion atomica de Redis para que solo una solicitud gane. | Obligatoria |
+| 7 | Concurrencia | Disparo simultaneo | Script que lanza 2 solicitudes en paralelo contra ambas versiones y guarda la evidencia. | Obligatoria |
+| 8 | Concurrencia | Comparativa | Documento que compara la falla (Issue 5) contra la mitigacion (Issue 6) con evidencia del Issue 7. | Obligatoria |
+| 9 | CD (opcional) | Workflow de CD a Cloud | Pipeline que despliega automaticamente a EC2 usando el switch blue-green en vez de hacerlo a mano. | Opcional |
+| 10 | CD (opcional) | Evidencia del ciclo CD | Capturas/logs de un ciclo completo commit -> build -> deploy automatico -> verificacion. | Opcional |
+| 11 | Transversal | Guion de presentacion | Orden de la demo en vivo, comandos a ejecutar y que mostrar si algo falla. | Obligatoria |
 
 ## Desglose de Issues propuesto
 
@@ -90,11 +110,11 @@ Formato pensado para el template `Tarea` (Area / Objetivo / Criterios de aceptac
      - [ ] Incluye evidencia concreta (output del script) de la falla y de la mitigacion.
    - Dependencias: Issue 7.
 
-### Tema 3 - Continuous Delivery (automatizar el despliegue)
+### Tema 3 - Continuous Delivery (OPCIONAL - no requerido por la catedra)
 
-Hoy el pipeline llega hasta Continuous Integration + publicacion de imagenes en GHCR (`release-ghcr.yml`); el paso a la instancia de AWS EC2 sigue siendo manual (SSH + `docker compose pull && up -d`, ver [docs/cloud-deployment.md](cloud-deployment.md)). Esto cierra ese gap y ademas sirve como el mecanismo que dispara el switch blue-green del Tema 1 en vez de ejecutarlo a mano.
+Hoy el pipeline llega hasta Continuous Integration + publicacion de imagenes en GHCR (`release-ghcr.yml`); el paso a la instancia de AWS EC2 sigue siendo manual (SSH + `docker compose pull && up -d`, ver [docs/cloud-deployment.md](cloud-deployment.md)). El profesor confirmo que automatizar este paso ya no es necesario para el TP2, asi que estas dos tareas quedan como opcionales/plus, sin bloquear al resto.
 
-9. **Workflow de Continuous Delivery hacia Cloud**
+9. **(Opcional) Workflow de Continuous Delivery hacia Cloud**
    - Area: CI/CD / Cloud (`area:ci`, `area:cloud`)
    - Objetivo: extender el pipeline (o agregar uno nuevo) para que, tras publicar las imagenes en GHCR, se conecte a la instancia EC2 (por ejemplo via SSH action) y ejecute el deploy, reutilizando el switch blue-green del Issue 2 en vez del `docker compose pull && up -d` manual actual.
    - Criterios de aceptacion:
@@ -104,7 +124,7 @@ Hoy el pipeline llega hasta Continuous Integration + publicacion de imagenes en 
      - [ ] Se actualiza `docs/cloud-deployment.md` para reflejar que el deploy es automatico y cual es el runbook manual de respaldo.
    - Dependencias: Issues 1, 2 y 3.
 
-10. **Evidencia de un ciclo de CD de punta a punta**
+10. **(Opcional) Evidencia de un ciclo de CD de punta a punta**
     - Area: Documentacion (`area:docs`)
     - Objetivo: registrar (logs/capturas del workflow) un ciclo completo: commit a `main` -> CI -> build/push a GHCR -> deploy automatico en cloud con blue-green -> verificacion de que el sitio productivo sirve la version nueva.
     - Criterios de aceptacion:
@@ -115,19 +135,20 @@ Hoy el pipeline llega hasta Continuous Integration + publicacion de imagenes en 
 
 11. **Guion y machete de la presentacion TP2**
     - Area: Documentacion (`area:docs`)
-    - Objetivo: guion de demostracion para los tres temas (orden de la demo, comandos a ejecutar en vivo, que mostrar si algo falla).
+    - Objetivo: guion de demostracion para los temas obligatorios (blue-green y concurrencia), orden de la demo, comandos a ejecutar en vivo, que mostrar si algo falla.
     - Criterios de aceptacion:
       - [ ] Guion ensayado por al menos una persona del equipo.
-    - Dependencias: Issues 4, 8 y 10.
+    - Dependencias: Issues 4 y 8 (Issue 10 es opcional, no bloquea).
 
 ## Puntos a confirmar en equipo
 
-- [ ] Definir el modelo de datos exacto en Redis para el campo `assignedTo` del incidente (clave, estructura, como se representa "sin asignar").
-- [ ] Confirmar si se agrupan los 11 Issues en un solo milestone M5 o se separan por tema (blue-green / concurrencia / CD).
-- [ ] Definir el mecanismo concreto de acceso SSH del workflow de CD a la instancia EC2 (secret existente vs. nuevo) sin exponer credenciales en logs.
-- [ ] Asignar responsables por Issue.
+Quedan como detalles de implementacion a resolver dentro de cada Issue, no bloquean la creacion de los Issues:
+
+- [ ] Definir el modelo de datos exacto en Redis para el campo `assignedTo` del incidente (clave, estructura, como se representa "sin asignar") — se resuelve en el Issue 5.
+- [ ] Definir el mecanismo concreto de acceso SSH del workflow de CD a la instancia EC2 (secret existente vs. nuevo) sin exponer credenciales en logs — se resuelve en el Issue 9 (opcional), si el equipo decide encararlo.
+- [ ] Asignar responsables por Issue (se asigna al tomar cada Issue).
 - [ ] Revisar si faltan labels (por ejemplo, un label especifico para "concurrencia" o si alcanza con los `area:*` existentes).
 
 ## Siguiente paso
 
-Una vez que el equipo revise y ajuste esta propuesta (via comentarios en el Pull Request o en la reunion), se crea el milestone `M5` y los Issues definitivos en GitHub siguiendo el template `Tarea`, igual que en TP1.
+El equipo aprobo esta propuesta. Se crea el milestone `M5` agrupando los 11 Issues (Tema 1 y Tema 2 obligatorios, Tema 3 opcional) en GitHub.
