@@ -1,0 +1,219 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: opsboard-bg-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-bg-data:/data
+    networks:
+      - bg-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  blue-api-1:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: opsboard-blue-api-1
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+      INSTANCE_ID: blue-api-1
+      FLEET_SIZE: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  blue-api-2:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: opsboard-blue-api-2
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+      INSTANCE_ID: blue-api-2
+      FLEET_SIZE: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  blue-api-3:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: opsboard-blue-api-3
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+      INSTANCE_ID: blue-api-3
+      FLEET_SIZE: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  blue-web-1:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: opsboard-blue-web-1
+    environment:
+      INSTANCE_ID: blue-web-1
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  blue-web-2:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: opsboard-blue-web-2
+    environment:
+      INSTANCE_ID: blue-web-2
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  blue-web-3:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: opsboard-blue-web-3
+    environment:
+      INSTANCE_ID: blue-web-3
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  green-api-1:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: opsboard-green-api-1
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+      INSTANCE_ID: green-api-1
+      FLEET_SIZE: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  green-api-2:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: opsboard-green-api-2
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+      INSTANCE_ID: green-api-2
+      FLEET_SIZE: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  green-api-3:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: opsboard-green-api-3
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+      INSTANCE_ID: green-api-3
+      FLEET_SIZE: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  green-web-1:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: opsboard-green-web-1
+    environment:
+      INSTANCE_ID: green-web-1
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  green-web-2:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: opsboard-green-web-2
+    environment:
+      INSTANCE_ID: green-web-2
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  green-web-3:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: opsboard-green-web-3
+    environment:
+      INSTANCE_ID: green-web-3
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: opsboard-bg-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ../nginx/nginx.blue-green.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../nginx/active:/etc/nginx/active:ro
+    depends_on:
+      - blue-web-1
+      - blue-web-2
+      - blue-web-3
+      - blue-api-1
+      - blue-api-2
+      - blue-api-3
+      - green-web-1
+      - green-web-2
+      - green-web-3
+      - green-api-1
+      - green-api-2
+      - green-api-3
+    networks:
+      - bg-net
+    restart: unless-stopped
+
+volumes:
+  redis-bg-data:
+
+networks:
+  bg-net:
