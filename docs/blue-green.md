@@ -4,24 +4,19 @@
 
 Dos entornos completos (blue y green) corren en paralelo compartiendo una única instancia de Redis. Nginx enruta el tráfico al entorno activo; el switch no requiere reiniciar contenedores.
 
-```
-                    ┌─────────────────────────────────────┐
-                    │           Redis (compartido)         │
-                    └────────────┬────────────────────────┘
-                                 │
-         ┌───────────────────────┼───────────────────────┐
-         │                       │                       │
-   ┌─────▼──────┐         ┌──────▼─────┐                 │
-   │ blue stack │         │ green stack│                  │
-   │  api ×3    │         │  api ×3    │                  │
-   │  web ×3    │         │  web ×3    │                  │
-   └─────┬──────┘         └──────┬─────┘                  │
-         └───────────────────────┘                        │
-                         │                                │
-                   ┌─────▼─────┐                          │
-                   │   Nginx   │◄─── env.conf (activo) ───┘
-                   │  :8080    │
-                   └───────────┘
+```mermaid
+graph TD
+    redis[Redis compartido]
+    blue[blue stack<br/>api ×3<br/>web ×3]
+    green[green stack<br/>api ×3<br/>web ×3]
+    nginx[Nginx :8080]
+    env[env.conf (activo)]
+
+    redis --- blue
+    redis --- green
+    blue --> nginx
+    green --> nginx
+    env --> nginx
 ```
 
 ## Archivos clave
