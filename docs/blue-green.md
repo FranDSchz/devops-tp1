@@ -14,6 +14,7 @@ graph TD
 
     redis --- blue
     redis --- green
+    redis --> env
     blue --> nginx
     green --> nginx
     env --> nginx
