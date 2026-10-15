@@ -10,7 +10,7 @@ graph TD
     blue[blue stack<br/>api ×3<br/>web ×3]
     green[green stack<br/>api ×3<br/>web ×3]
     nginx[Nginx :8080]
-    env[env.conf (activo)]
+    env["env.conf (activo)"]
 
     redis --- blue
     redis --- green
