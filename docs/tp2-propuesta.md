@@ -8,7 +8,7 @@ Organizacion del TP2 en Issues de GitHub. No reemplaza al roadmap de TP1 ([docs/
 
 ## Consigna
 
-> 1. Despliegue: blue-green deployment. Como publicar una version con cambio rapido y rollback de bajo riesgo? Ejecutar versiones azul y verde, alternar el proxy entre ellas y volver a la anterior.
+> 1. Despliegue: blue-green deployment. Como publicar una version con cambio rapido y rollback de bajo riesgo? Ejecutar versiones azul y green, alternar el proxy entre ellas y volver a la anterior.
 > 2. Consistencia: condiciones de carrera y controles de concurrencia. Como impedir que dos procesos asignen el mismo recurso? Lanzar dos solicitudes simultaneas sobre un unico cupo y comparar una version vulnerable con otra protegida.
 
 ## Milestone propuesto
@@ -20,15 +20,15 @@ Descripcion sugerida: Despliegue blue-green con rollback de bajo riesgo y contro
 ## Decisiones confirmadas
 
 - **Se trabaja sobre el proyecto existente (OpsBoard)**, no se arma una app o servicio nuevo para la demo.
-- **Tema 1 (blue-green)**: se reutiliza el stack completo de OpsBoard (web + api + Redis) de [infrastructure/compose](../infrastructure/compose). Blue y verde son dos instancias de ese mismo stack compartiendo Redis, no un servicio simplificado aparte.
+- **Tema 1 (blue-green)**: se reutiliza el stack completo de OpsBoard (web + api + Redis) de [infrastructure/compose](../infrastructure/compose). Blue y green son dos instancias de ese mismo stack compartiendo Redis, no un servicio simplificado aparte.
 - **Tema 2 (concurrencia)**: el recurso con cupo unico es el modelo de incidentes que ya existe. El caso concreto propuesto es **asignar un incidente a un unico responsable** (agregar un campo tipo `assignedTo` al incidente existente): dos solicitudes simultaneas intentan tomar el mismo incidente y solo una debe ganarlo. No se modela un dominio nuevo.
 
 ## Resumen de tareas
 
 | # | Tema | Tarea | Que se hace (breve) | Prioridad |
 | --- | --- | --- | --- | --- |
-| 1 | Blue-Green | Entornos blue y verde | Levantar dos instancias del stack de OpsBoard (web+api) compartiendo el mismo Redis. | Obligatoria |
-| 2 | Blue-Green | Switch del proxy | Script para que Nginx pase de apuntar a blue a apuntar a verde sin cortar el servicio. | Obligatoria |
+| 1 | Blue-Green | Entornos blue y green | Levantar dos instancias del stack de OpsBoard (web+api) compartiendo el mismo Redis. | Obligatoria |
+| 2 | Blue-Green | Switch del proxy | Script para que Nginx pase de apuntar a blue a apuntar a green sin cortar el servicio. | Obligatoria |
 | 3 | Blue-Green | Rollback | Volver a la version anterior ejecutando el switch inverso, con el tiempo que tarda medido. | Obligatoria |
 | 4 | Blue-Green | Diagrama y runbook | Dibujo de la arquitectura blue-green y los comandos exactos para repetir la demo. | Obligatoria |
 | 5 | Concurrencia | Asignacion vulnerable | Endpoint que asigna un incidente a un responsable sin control de concurrencia (se puede duplicar). | Obligatoria |
@@ -45,17 +45,17 @@ Formato pensado para el template `Tarea` (Area / Objetivo / Criterios de aceptac
 
 ### Tema 1 - Blue-Green deployment
 
-1. **Preparar entornos blue y verde en Docker Compose**
+1. **Preparar entornos blue y green en Docker Compose**
    - Area: Infraestructura (`area:infra`)
-   - Objetivo: tener dos instancias paralelas del stack de OpsBoard (web+api, blue y verde) compartiendo el mismo Redis, para poder alternar entre versiones.
+   - Objetivo: tener dos instancias paralelas del stack de OpsBoard (web+api, blue y green) compartiendo el mismo Redis, para poder alternar entre versiones.
    - Criterios de aceptacion:
      - [ ] Ambos entornos levantan con `docker compose` (a partir del compose existente) y responden en puertos/upstreams distintos.
      - [ ] Comparten la misma instancia de Redis sin perder datos al alternar.
    - Dependencias: ninguna.
 
-2. **Alternar el proxy Nginx entre blue y verde sin downtime**
+2. **Alternar el proxy Nginx entre blue y green sin downtime**
    - Area: Infraestructura (`area:infra`)
-   - Objetivo: script o procedimiento para cambiar el upstream activo de Nginx entre blue y verde con cero (o minimo) downtime.
+   - Objetivo: script o procedimiento para cambiar el upstream activo de Nginx entre blue y green con cero (o minimo) downtime.
    - Criterios de aceptacion:
      - [ ] Existe un comando/script documentado para el switch.
      - [ ] Durante el switch no se observan errores 5xx sostenidos (se verifica con requests continuos).
@@ -71,7 +71,7 @@ Formato pensado para el template `Tarea` (Area / Objetivo / Criterios de aceptac
 
 4. **Diagrama y runbook de blue-green para la presentacion**
    - Area: Documentacion (`area:docs`)
-   - Objetivo: diagrama de arquitectura (blue/verde + proxy) y runbook paso a paso para mostrar en la presentacion.
+   - Objetivo: diagrama de arquitectura (blue/green + proxy) y runbook paso a paso para mostrar en la presentacion.
    - Criterios de aceptacion:
      - [ ] Diagrama incluido en el informe o en una carpeta de evidencias.
      - [ ] Runbook con los comandos exactos usados en el ensayo.
