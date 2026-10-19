@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-19",
+  "environment": "local (docker-compose.blue-green.yml)",
+  "tool": "infrastructure/scripts/load-test.sh",
+  "switch_deploy": {
+    "description": "Switch blue → green (deploy nueva versión)",
+    "command": "./infrastructure/scripts/switch-env.sh green",
+    "total_requests": 131,
+    "successful_2xx": 131,
+    "errors_5xx": 0,
+    "error_rate_pct": 0
+  },
+  "switch_rollback": {
+    "description": "Switch green → blue (rollback)",
+    "command": "./infrastructure/scripts/switch-env.sh blue",
+    "total_requests": 129,
+    "successful_2xx": 129,
+    "errors_5xx": 0,
+    "error_rate_pct": 0,
+    "rollback_time_ms": 597
+  }
+}
