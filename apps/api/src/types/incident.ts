@@ -2,6 +2,7 @@ export type Severity = "low" | "medium" | "high" | "critical";
 export type Status = "open" | "in_progress" | "resolved" | "closed";
 
 export interface Incident {
+  assignedTo?: string;
   id: string;
   title: string;
   service: string;

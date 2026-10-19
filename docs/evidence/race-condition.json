@@ -1,0 +1,87 @@
+{
+  "executedAt": "2026-10-19T00:00:19.959Z",
+  "bases": [
+    "http://api-a:3000",
+    "http://api-b:3000"
+  ],
+  "rounds": [
+    {
+      "mode": "vulnerable",
+      "incidentId": "6cf97d46-5232-4063-94b6-fd940c00a433",
+      "responses": [
+        {
+          "status": 200,
+          "instance": "race-api-a",
+          "body": {
+            "result": "assigned",
+            "responsible": "Ana",
+            "mode": "vulnerable"
+          }
+        },
+        {
+          "status": 200,
+          "instance": "race-api-b",
+          "body": {
+            "result": "assigned",
+            "responsible": "Bruno",
+            "mode": "vulnerable"
+          }
+        }
+      ],
+      "final": {
+        "assignedTo": "Bruno",
+        "id": "6cf97d46-5232-4063-94b6-fd940c00a433",
+        "title": "Race demo vulnerable",
+        "service": "demo",
+        "severity": "low",
+        "status": "open",
+        "createdAt": "2026-10-19T00:00:20.077Z",
+        "updatedAt": "2026-10-19T00:00:20.605Z"
+      },
+      "checks": {
+        "repeatedAssignment": 409,
+        "editPreservedOwner": true,
+        "missingIncident": 404
+      }
+    },
+    {
+      "mode": "protected",
+      "incidentId": "65b98e51-4ac9-4538-81f8-606625d27eb1",
+      "responses": [
+        {
+          "status": 200,
+          "instance": "race-api-a",
+          "body": {
+            "result": "assigned",
+            "responsible": "Ana",
+            "mode": "protected"
+          }
+        },
+        {
+          "status": 409,
+          "instance": "race-api-b",
+          "body": {
+            "result": "conflict",
+            "responsible": "Bruno",
+            "mode": "protected"
+          }
+        }
+      ],
+      "final": {
+        "assignedTo": "Ana",
+        "id": "65b98e51-4ac9-4538-81f8-606625d27eb1",
+        "title": "Race demo protected",
+        "service": "demo",
+        "severity": "low",
+        "status": "open",
+        "createdAt": "2026-10-19T00:00:20.644Z",
+        "updatedAt": "2026-10-19T00:00:20.651Z"
+      },
+      "checks": {
+        "repeatedAssignment": 409,
+        "editPreservedOwner": true,
+        "missingIncident": 404
+      }
+    }
+  ]
+}

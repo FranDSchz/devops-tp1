@@ -63,3 +63,21 @@ jobs:
           file: apps/web/Dockerfile
           push: false
           tags: opsboard-web:ci-check
+
+  concurrency-demo:
+    name: Verify concurrent assignment with real Redis
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Start two API containers and Redis
+        run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml up -d --build --wait
+      - name: Compare vulnerable and protected assignment
+        run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml run --rm demo
+      - name: Collect service logs
+        if: failure()
+        run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml logs --tail 100
+      - name: Stop demo
+        if: always()
+        run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml down
