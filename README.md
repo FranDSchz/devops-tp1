@@ -20,6 +20,7 @@ OpsBoard es una aplicacion web contenerizada para registrar y gestionar incident
 - **M2**: completado (contenedores, Nginx, tres replicas web y tres API, balanceo y tolerancia a fallos).
 - **M3**: completado (CI, seguridad CodeQL/Trivy y Registry GHCR).
 - **M4**: completado (despliegue en AWS EC2 desde GHCR y documentacion técnica consolidada).
+- **M5**: completado (blue-green deployment con rollback sin downtime y control de condiciones de carrera en Redis).
 
 La aplicacion es ejecutable localmente y en la nube: ver [Ejecucion local](#ejecucion-local-docker-compose) y [Despliegue en Cloud](#despliegue-en-cloud-aws-ec2).
 
@@ -202,6 +203,42 @@ La solución se encuentra desplegada y operativa en una máquina virtual Linux e
   - Identidad Web: [http://3.17.23.16/instance.json](http://3.17.23.16/instance.json)
   - API REST Incidentes: [http://3.17.23.16/api/incidents](http://3.17.23.16/api/incidents)
 - Para más detalles sobre el aprovisionamiento, firewall y runbook operativo, ver [docs/cloud-deployment.md](docs/cloud-deployment.md).
+
+## Blue-Green Deployment (TP2)
+
+Dos entornos completos (blue y green) corren en paralelo compartiendo Redis. Nginx enruta el tráfico al entorno activo; el switch no requiere reiniciar contenedores.
+
+```bash
+# Levantar el stack completo
+docker compose -f infrastructure/compose/docker-compose.blue-green.yml up -d
+
+# Promover green (deploy nueva versión)
+./infrastructure/scripts/switch-env.sh green
+
+# Rollback a blue
+./infrastructure/scripts/switch-env.sh blue
+```
+
+El switch y el rollback se ejecutaron con **0 errores 5xx** y el rollback completó en **menos de 600ms**. Ver evidencia en [docs/blue-green.md](docs/blue-green.md).
+
+## Condiciones de Carrera y Concurrencia (TP2)
+
+Demo de dos solicitudes simultáneas compitiendo por asignar el mismo incidente: versión vulnerable (doble escritura) vs. versión protegida con script Lua atómico en Redis.
+
+```bash
+# Levantar el entorno de demo
+docker compose -f infrastructure/compose/docker-compose.race-demo.yml up -d --build --wait
+
+# Ejecutar la demo (lanza Ana y Bruno en paralelo)
+docker compose -f infrastructure/compose/docker-compose.race-demo.yml run --rm demo
+```
+
+| Escenario | Respuestas | Resultado |
+|---|---|---|
+| Vulnerable | 200 + 200 | Ambos creen ganar — escritura perdida |
+| Protegido | 200 + 409 | Solo un ganador — operación atómica Lua |
+
+Ver explicación completa en [docs/concurrency.md](docs/concurrency.md).
 
 ## Colaboracion
 
