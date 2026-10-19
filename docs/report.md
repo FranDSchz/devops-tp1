@@ -178,6 +178,67 @@ flowchart LR
 
 ---
 
+## 5b. Blue-Green Deployment y Rollback Sin Downtime
+
+### Arquitectura Blue-Green
+
+Dos entornos completos (blue y green) corren en paralelo, compartiendo una única instancia de Redis. Nginx enruta el tráfico al entorno activo mediante un archivo de configuración intercambiable (`env.conf`); el switch no requiere reiniciar ningún contenedor.
+
+```mermaid
+graph TD
+    redis[("Redis compartido")]
+    blue["blue stack<br/>api ×3 · web ×3"]
+    green["green stack<br/>api ×3 · web ×3"]
+    nginx["Nginx :8080"]
+    env["env.conf (activo)"]
+
+    redis --- blue
+    redis --- green
+    blue --> nginx
+    green --> nginx
+    env -->|"define upstream activo"| nginx
+```
+
+### Runbook de Deploy y Rollback
+
+```bash
+# 1. Levantar el stack completo (blue + green + nginx + redis)
+docker compose -f infrastructure/compose/docker-compose.blue-green.yml up -d
+
+# 2. Verificar entorno activo
+curl -s http://localhost:8080/health | grep instance
+
+# 3. Promover green (deploy de nueva versión)
+./infrastructure/scripts/switch-env.sh green
+
+# 4. Verificar que green está sirviendo
+curl -s http://localhost:8080/health | grep instance
+# → instancias green-api-*
+
+# 5. Rollback a blue ante problema detectado
+time ./infrastructure/scripts/switch-env.sh blue
+
+# 6. Verificar que blue volvió a ser el activo
+curl -s http://localhost:8080/health | grep instance
+# → instancias blue-api-*
+
+# 7. Prueba de carga durante el switch (detecta 5xx)
+./infrastructure/scripts/load-test.sh http://localhost:8080/health 30
+```
+
+### Evidencia de Switch y Rollback sin Downtime
+
+Ensayo realizado el 2026-10-19 con el stack local:
+
+| Operación | Requests totales | Exitosos (2xx) | Errores 5xx | Tiempo |
+|---|---|---|---|---|
+| Switch blue → green (deploy) | 131 | 131 | 0 | — |
+| Switch green → blue (rollback) | 129 | 129 | 0 | **597 ms** |
+
+Evidencia detallada en `docs/evidence/blue-green-rollback.json`.
+
+---
+
 ## 6. Matriz de Trazabilidad Técnica
 
 | Componente del Sistema | Implementación Técnica | Estado de Verificación | Evidencia Técnica Asociada |
@@ -190,3 +251,4 @@ flowchart LR
 | **Seguridad (SAST / SCA)** | Escaneo estático de código, dependencias y secretos. | **Verificado** | Pipeline `.github/workflows/security.yml` (CodeQL SAST + Trivy SCA/Secret scanning); documentado en `docs/security.md`. |
 | **Registro de Imágenes** | GitHub Container Registry (GHCR) para imágenes de Web y API. | **Verificado** | Pipeline `.github/workflows/release-ghcr.yml` automatizado con tags semánticos y SHA; documentado en `docs/registry.md`. |
 | **Despliegue en Cloud** | Stack Docker Compose en AWS EC2 consumiendo imágenes de GHCR. | **Verificado** | Desplegado en vivo en `http://3.17.23.16`, endpoints `/health`, `/ready` y persistencia Redis validados; ver `docs/cloud-deployment.md`. |
+| **Blue-Green Deployment** | Dos entornos paralelos (blue/green) con switch atómico via `nginx -s reload`. | **Verificado** | Switch y rollback con 0 errores 5xx; rollback en 597 ms; ver `docs/blue-green.md` y `docs/evidence/blue-green-rollback.json`. |
