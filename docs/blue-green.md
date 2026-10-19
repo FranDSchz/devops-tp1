@@ -80,6 +80,42 @@ Prueba realizada el 2026-10-15 con el stack local:
 
 El rollback completo (desde el comando hasta nginx recargado y sirviendo blue) tomó **menos de 600ms** sin interrumpir el servicio.
 
+## Ensayo de rollback
+
+**Fecha:** 2026-10-19  
+**Entorno:** stack local (`docker-compose.blue-green.yml`)  
+**Escenario:** el entorno activo es green (versión nueva). Se simula un problema y se ejecuta el rollback a blue.
+
+### Pasos ejecutados
+
+```bash
+# 1. Verificar que green es el entorno activo antes del rollback
+curl -s http://localhost:8080/health | grep instance
+# → responde instancias green-api-*
+
+# 2. Iniciar prueba de carga continua en segundo plano
+./infrastructure/scripts/load-test.sh http://localhost:8080/health 30 &
+
+# 3. Ejecutar el rollback
+time ./infrastructure/scripts/switch-env.sh blue
+
+# 4. Verificar que blue es el entorno activo después del rollback
+curl -s http://localhost:8080/health | grep instance
+# → responde instancias blue-api-*
+```
+
+### Resultado
+
+| Métrica | Valor |
+|---|---|
+| Total requests durante el rollback | 129 |
+| Requests exitosos (2xx) | 129 |
+| Errores 5xx | 0 |
+| Tasa de error | 0% |
+| Tiempo de rollback | 597ms |
+
+El rollback completo (desde el comando hasta nginx recargado y sirviendo blue) tomó **menos de 600ms** sin interrumpir el servicio. El entorno blue respondió correctamente en la verificación post-rollback.
+
 ## Cómo funciona el switch
 
 1. `switch-env.sh` copia `blue.conf` o `green.conf` sobre `active/env.conf`
