@@ -210,6 +210,8 @@ Cada cambio comienza con un Issue, se implementa en una rama corta y entra a `ma
 
 ## Documentacion
 
+- [TP2: demo de condiciones de carrera y control de concurrencia](docs/concurrency.md)
+- [TP2: blue-green y rollback](docs/blue-green.md)
 - [Arquitectura del sistema](docs/architecture.md)
 - [Decisiones del proyecto](docs/decisions.md)
 - [Roadmap de entregas](docs/roadmap.md)

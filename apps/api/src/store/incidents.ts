@@ -23,6 +23,7 @@ function toHash(incident: Incident): Record<string, string> {
 function fromHash(hash: Record<string, string>): Incident | null {
   if (!hash.id) return null;
   return {
+    ...(hash.assignedTo ? { assignedTo: hash.assignedTo } : {}),
     id: hash.id,
     title: hash.title,
     service: hash.service,

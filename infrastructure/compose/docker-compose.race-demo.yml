@@ -1,0 +1,48 @@
+name: opsboard-race-demo
+services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+  api-a:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      REDIS_HOST: redis
+      RACE_DEMO_ENABLED: 'true'
+      INSTANCE_ID: race-api-a
+    depends_on:
+      redis:
+        condition: service_healthy
+  api-b:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      REDIS_HOST: redis
+      RACE_DEMO_ENABLED: 'true'
+      INSTANCE_ID: race-api-b
+    depends_on:
+      redis:
+        condition: service_healthy
+  demo:
+    image: node:22-alpine
+    profiles: [tools]
+    working_dir: /demo
+    volumes:
+      - ../scripts/race-demo.mjs:/demo/race-demo.mjs:ro
+      - ../../docs/evidence:/evidence
+    environment:
+      API_A: http://api-a:3000
+      API_B: http://api-b:3000
+      EVIDENCE_PATH: /evidence/race-condition.json
+    command: [node, race-demo.mjs]
+    depends_on:
+      api-a:
+        condition: service_healthy
+      api-b:
+        condition: service_healthy

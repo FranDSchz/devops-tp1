@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { fileURLToPath } from "node:url";
 import { incidentRoutes } from "./routes/incidents.js";
+import { assignmentDemoRoutes } from "./routes/assignment-demo.js";
 import { instanceRoutes } from "./routes/instances.js";
 import {
   getInstanceId,
@@ -48,6 +49,9 @@ export function buildApp() {
   });
 
   app.register(incidentRoutes);
+  if (process.env.RACE_DEMO_ENABLED === "true") {
+    app.register(assignmentDemoRoutes);
+  }
   app.register(instanceRoutes);
 
   return app;
