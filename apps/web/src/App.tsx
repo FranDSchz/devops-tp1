@@ -186,6 +186,9 @@ function App() {
           <div>
             <h1>OpsBoard</h1>
             <p>Registrá, priorizá y seguí incidentes desde un único tablero.</p>
+            <a className="demo-entry-link" href="/demo/blue-green">
+              Ver demo blue-green <span aria-hidden="true">↗</span>
+            </a>
           </div>
           <div className="api-state" title="La interfaz consume la API REST de OpsBoard">
             <span>Integración API</span>
