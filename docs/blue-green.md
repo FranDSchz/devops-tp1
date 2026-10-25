@@ -19,6 +19,78 @@ aplicación. Para publicar una versión nueva de verdad, el entorno inactivo
 tendría que ejecutar esa nueva versión y pasar las comprobaciones antes de
 recibir tráfico.
 
+## ¿Qué es blue-green deployment?
+
+Es una forma de desplegar una aplicación manteniendo dos entornos capaces de
+atender a los usuarios. Uno recibe las peticiones públicas; el otro permanece
+disponible para preparar la siguiente versión. Los colores identifican esos
+entornos, no versiones fijas: después de publicar green, blue puede convertirse
+en el destino del próximo despliegue.
+
+Los usuarios siguen entrando por la misma dirección. Un proxy o balanceador
+decide a cuál de los dos entornos enviar las peticiones. Preparar la nueva
+versión en el entorno inactivo permite comprobar que arranca y funciona antes
+de exponerla; el momento de publicación es el cambio de destino del tráfico.
+
+## ¿Qué objetivo tiene?
+
+El objetivo es reducir el tiempo y el riesgo del cambio de versión. Si se
+actualiza directamente el entorno que atiende a los usuarios, un fallo durante
+la instalación o el arranque puede interrumpir el servicio. Con blue-green, la
+nueva versión ya está en marcha cuando recibe su primera petición pública. Si
+aparece un problema después del cambio, el entorno anterior sigue disponible
+para volver a dirigirle el tráfico.
+
+Esto no garantiza que nunca haya errores. Permite que la operación de cambio
+y su reversión sean breves porque no requieren reconstruir la versión anterior
+en ese momento. La aplicación nueva todavía puede fallar ante casos que las
+comprobaciones previas no detectaron.
+
+## ¿Cómo se realiza un despliegue?
+
+Supongamos que blue atiende a los usuarios con la versión 1 y queremos publicar
+la versión 2:
+
+| Momento | Blue | Green | Destino del tráfico público |
+| --- | --- | --- | --- |
+| Antes del despliegue | Versión 1 en uso | Sin la nueva versión | Blue |
+| Preparación | Versión 1 en uso | Versión 2 instalada y comprobada | Blue |
+| Publicación | Versión 1 conservada | Versión 2 en uso | Green |
+| Si hay que volver atrás | Versión 1 vuelve a atender | Versión 2 queda aislada | Blue |
+
+Primero se despliega la versión 2 en green sin modificar blue. Se comprueba su
+estado y se prueban las funciones que dependen de otros servicios, como la base
+de datos. Cuando green está listo, se cambia la configuración del proxy o
+balanceador para que las nuevas peticiones vayan allí. Se observan las
+respuestas y el funcionamiento de la aplicación. Si la versión 2 falla, se
+revierte la selección del proxy para regresar a blue.
+
+El cambio de tráfico no equivale a reiniciar toda la aplicación: ambos
+entornos ya estaban ejecutándose. Tampoco obliga a que los nombres conserven
+su papel en el siguiente despliegue; la próxima versión podría prepararse en
+blue y publicarse cambiando el tráfico de green a blue.
+
+## ¿Qué hace falta para que el rollback sea de bajo riesgo?
+
+El entorno anterior debe permanecer operativo hasta confirmar que la nueva
+versión funciona. También hay que comprobar el entorno de destino antes del
+cambio y observarlo después: que un proceso esté levantado no demuestra por sí
+solo que todas las funciones respondan bien. Durante el cambio pueden terminar
+peticiones iniciadas en blue mientras las nuevas ya llegan a green; las dos
+versiones deben poder convivir durante ese intervalo.
+
+Los datos requieren atención aparte. Si ambos entornos usan la misma base de
+datos, las escrituras hechas mientras green estuvo activo permanecen al volver
+a blue. Por eso las versiones deben poder leer los datos y el esquema que
+comparten; una migración incompatible puede impedir el rollback aunque el
+proxy vuelva a apuntar a blue. Las sesiones de usuario tampoco deberían
+depender únicamente de la memoria de un contenedor que deja de recibir
+tráfico. Mantener dos entornos funcionando a la vez exige, además, recursos
+para ambos.
+
+Blue-green revierte **a qué versión llegan las peticiones**, no el estado de
+los datos ni los efectos externos de las operaciones ya realizadas.
+
 ## Arquitectura y recorrido de una petición
 
 ~~~mermaid
