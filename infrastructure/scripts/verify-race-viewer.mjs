@@ -9,16 +9,24 @@ async function request(api, path, body) {
 }
 const page = await fetch(base, {signal:AbortSignal.timeout(10000)});
 assert.equal(page.status,200);
-assert.match(await page.text(),/Un incidente\. Dos confirmaciones\./);
-for(const concurrent of [true,false]) {
+assert.match(await page.text(),/Dos peticiones\. Un mismo incidente\./);
+for(const scenario of ['concurrent','sequential','protected']) {
+  const concurrent=scenario!=='sequential';
+  const mode=scenario==='protected'?'protected':'vulnerable';
   const created=await request('a','/api/incidents',{title:'Viewer integration test',service:'demo',severity:'low'});
   assert.equal(created.status,201);
   const id=created.body.id;
-  const assign=(api,responsible)=>request(api,`/api/demo/incidents/${id}/assign/vulnerable?trace=true`,{responsible});
+  const assign=(api,responsible)=>request(api,`/api/demo/incidents/${id}/assign/${mode}?trace=true`,{responsible});
   const responses=concurrent?await Promise.all([assign('a','Ana'),assign('b','Bruno')]):[await assign('a','Ana'),await assign('b','Bruno')];
   assert.notEqual(responses[0].instance,responses[1].instance);
-  assert.deepEqual(responses.map(r=>r.status),concurrent?[200,200]:[200,409]);
+  assert.deepEqual(responses.map(r=>r.status).sort(),scenario==='concurrent'?[200,200]:[200,409]);
   for(const response of responses){
+    if(mode==='protected'){
+      assert.equal(response.body.trace.length,1);
+      assert.equal(response.body.trace[0].step,'atomic');
+      assert.equal(response.body.trace[0].result,response.status===200?'assigned':'conflict');
+      continue;
+    }
     assert.equal(response.body.trace[0].step,'read');
     if(response.status===200){
       assert.equal(response.body.trace[0].assignedTo,null);
@@ -31,6 +39,7 @@ for(const concurrent of [true,false]) {
   assert.equal(final.status,200);
   assert.ok(['Ana','Bruno'].includes(final.body.assignedTo));
   if(!concurrent)assert.equal(final.body.assignedTo,'Ana');
-  console.log(JSON.stringify({scenario:concurrent?'concurrent':'sequential',responses,finalOwner:final.body.assignedTo},null,2));
+  if(mode==='protected')assert.equal(final.body.assignedTo,responses.find(r=>r.status===200).body.responsible);
+  console.log(JSON.stringify({scenario,responses,finalOwner:final.body.assignedTo},null,2));
 }
 console.log('PASS: viewer + nginx + two real APIs + Redis, observed traces and sequential control.');

@@ -2,7 +2,7 @@ import { setTimeout } from "node:timers/promises";
 import { getRedis } from "./redis.js";
 
 export type AssignmentResult = "assigned" | "conflict" | "not-found";
-export type AssignmentEvent = { step: "read" | "written"; at: number; assignedTo: string | null };
+export type AssignmentEvent = { step: "read" | "written" | "atomic"; at: number; assignedTo: string | null; result?: AssignmentResult };
 
 // Runs entirely inside Redis: no other client's command can interleave
 // between the availability check and the assignment.
@@ -23,7 +23,9 @@ export async function assignIncident(
   const key = `incident:${id}`;
   if (mode === "protected") {
     const result = Number(await redis.eval(ASSIGN, 1, key, responsible, new Date().toISOString()));
-    return result === -1 ? "not-found" : result === 0 ? "conflict" : "assigned";
+    const outcome = result === -1 ? "not-found" : result === 0 ? "conflict" : "assigned";
+    observe?.({ step: "atomic", at: Date.now(), assignedTo: result === 1 ? responsible : null, result: outcome });
+    return outcome;
   }
 
   const incident = await redis.hgetall(key);
