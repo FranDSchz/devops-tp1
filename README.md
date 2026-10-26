@@ -247,6 +247,7 @@ Cada cambio comienza con un Issue, se implementa en una rama corta y entra a `ma
 
 ## Documentacion
 
+- [Demo visual con solicitudes reales: condiciones de carrera](docs/race-viewer.md)
 - [TP2: demo de condiciones de carrera y control de concurrencia](docs/concurrency.md)
 - [TP2: blue-green y rollback](docs/blue-green.md)
 - [Arquitectura del sistema](docs/architecture.md)

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Un incidente, dos confirmaciones | OpsBoard</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101820;color:#eff3f6}
+*{box-sizing:border-box}body{margin:0;padding:32px clamp(20px,4vw,70px);max-width:1600px;margin-inline:auto}
+.eyebrow{color:#7ed9cb;font-size:16px;letter-spacing:2px;text-transform:uppercase}
+h1{font-size:clamp(32px,4vw,56px);margin:8px 0}p{font-size:22px;line-height:1.5;margin:8px 0 20px}
+.muted,small{color:#b4c0cc}.toolbar{display:flex;gap:14px;flex-wrap:wrap;margin:24px 0}
+button{font:700 19px system-ui;padding:15px 22px;border-radius:8px;border:1px solid #657487;cursor:pointer;background:#243343;color:white}
+button.primary{background:#ffcf66;color:#18212c;border-color:#ffcf66}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:3px solid #7ed9cb;outline-offset:3px}
+.diagram{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:24px;margin-block:26px}
+.actor,.shared{padding:24px;border:1px solid #596b7e;border-radius:12px;background:#172330}
+.shared{text-align:center;border-color:#7ed9cb}.name{font-size:32px;font-weight:750}.instance{font-size:16px;color:#9eb3c6;margin:5px 0 20px}
+.state{font-size:23px;min-height:80px}.http{font-size:28px;font-weight:750;color:#ffcf66;min-height:40px}.owner{font-size:36px;font-weight:750;color:#7ed9cb;margin-block:14px;overflow-wrap:anywhere}
+.note{font-size:16px;line-height:1.45}.banner{font-size:24px;padding:20px;border-left:5px solid #7ed9cb;background:#1a2c35;line-height:1.4}
+.stages{display:flex;gap:10px;margin-top:18px}.stages span{padding:9px;border:1px solid #596b7e;font-size:17px}.stages .seen{border-color:#7ed9cb;background:#23433e;color:#b9ffed}.actor.observed{outline:3px solid #ffcf66}.observation{font-size:17px;color:#ffcf66;min-height:48px;margin-top:12px}
+.banner.bad{border-color:#ff858b;background:#39252d}.banner.error{border-color:#ff858b}
+h2{font-size:27px;margin:26px 0 8px}.step{padding:16px;background:#243343;font-size:23px;min-height:70px;border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:18px;margin-top:15px}td,th{text-align:left;padding:12px;border-bottom:1px solid #435266}th{color:#9eb3c6}
+details{margin-top:24px;font-size:18px}pre{overflow:auto;font-size:14px;white-space:pre-wrap}code{font-size:16px}
+@media(max-width:850px){.diagram{grid-template-columns:1fr}.state{min-height:0}body{padding:20px}.name{font-size:27px}}
+</style>
+<header><div class="eyebrow">OpsBoard / condición de carrera / servidores reales</div>
+<h1>Un incidente. Dos confirmaciones.</h1>
+<p>Regla: el incidente libre se asigna a <strong>un solo responsable</strong>.</p></header>
+<div class="toolbar">
+<button class="primary" id="race">Enviar Ana y Bruno a la vez</button>
+<button id="ordered">Comparar: Ana termina antes de enviar Bruno</button>
+</div>
+<div id="status" class="banner" role="status" aria-live="polite">Listo. Cada ejecución crea un incidente nuevo en Redis.</div>
+<div class="diagram">
+ <article class="actor" id="actorA"><div class="name">Ana</div><div id="instanceA" class="instance">Solicitud a API A</div><div id="stateA" class="state">Sin enviar</div><div id="httpA" class="http">—</div><div class="stages"><span id="readA">1. Consulta</span><span id="writtenA">2. Escritura</span></div><div id="observationA" class="observation">Observación pendiente</div></article>
+ <article class="shared"><div class="name">Redis compartido</div><div id="incident" class="instance">Todavía no hay incidente</div><div class="note">Responsable consultado al finalizar</div><div id="owner" class="owner">—</div><div class="note">Este valor proviene de un GET real a la API.</div></article>
+ <article class="actor" id="actorB"><div class="name">Bruno</div><div id="instanceB" class="instance">Solicitud a API B</div><div id="stateB" class="state">Sin enviar</div><div id="httpB" class="http">—</div><div class="stages"><span id="readB">1. Consulta</span><span id="writtenB">2. Escritura</span></div><div id="observationB" class="observation">Observación pendiente</div></article>
+</div>
+<h2>Qué observó cada servidor</h2>
+<p class="note muted">Primero se ejecutan las solicitudes reales. Después podés recorrer sus observaciones, paso a paso. Esta reproducción no pausa el servidor ni genera respuestas simuladas.</p>
+<div class="toolbar"><button id="next" disabled>Ver siguiente observación</button><button id="all" disabled>Mostrar toda la traza</button><button id="download" disabled>Guardar evidencia JSON</button></div>
+<div id="step" class="step" aria-live="polite">La traza aparecerá después de ejecutar.</div>
+<table><thead><tr><th>Momento</th><th>Solicitud</th><th>Observación del servidor</th></tr></thead><tbody id="events"></tbody></table>
+<p class="note muted">La versión vulnerable conserva una pausa educativa de 500 ms entre consultar y escribir para facilitar el intercalado. Timestamps de servidor con resolución de 1 ms: un empate no establece un orden global de escrituras. El GET final es la referencia del responsable persistido.</p>
+<details><summary>Respuestas HTTP y evidencia técnica</summary><pre id="raw">Todavía no hay evidencia.</pre></details>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let evidence=null, events=[], position=0, busy=false;
+async function call(api,path,body){
+ const response=await fetch(`/${api}${path}`,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+ const data=await response.json();
+ return {status:response.status,instance:response.headers.get('x-instance-id'),body:data};
+}
+function report(text,error=false){$('status').textContent=text;$('status').className='banner'+(error?' error':'');}
+function reset(){
+ evidence=null;events=[];position=0;$('events').replaceChildren();$('raw').textContent='Ejecutando...';$('owner').textContent='—';
+ for(const name of ['A','B']){$(`state${name}`).textContent='Sin enviar';$(`http${name}`).textContent='—';$(`actor${name}`).classList.remove('observed');$(`observation${name}`).textContent='Observación pendiente';for(const step of ['read','written'])$(`${step}${name}`).classList.remove('seen');}
+ for(const id of ['next','all','download'])$(id).disabled=true;
+ $('step').textContent='Esperando observaciones reales de las APIs...';
+}
+async function run(ordered){
+ if(busy)return;busy=true;reset();$('race').disabled=true;$('ordered').disabled=true;
+ try{
+  report('Creando un incidente nuevo en el servidor...');
+  const created=await call('a','/api/incidents',{title:'Demo visual: API de pagos caída',service:'payments',severity:'high'});
+  if(created.status!==201)throw Error(`No se pudo crear el incidente (HTTP ${created.status}).`);
+  const id=created.body.id;$('incident').textContent=`Incidente ${id.slice(0,8)}`;
+  const assign=async(api,responsible)=>{
+   const lane=api.toUpperCase();$(`state${lane}`).textContent='Solicitud enviada al servidor...';
+   const result=await call(api,`/api/demo/incidents/${encodeURIComponent(id)}/assign/vulnerable?trace=true`,{responsible});
+   $(`instance${lane}`).textContent=`${result.instance??'API sin identificar'} / ${responsible}`;
+   $(`state${lane}`).textContent=result.status===200?'El servidor confirmó la asignación.':result.status===409?'El servidor encontró el incidente ocupado.':'El servidor rechazó la solicitud.';
+   $(`http${lane}`).textContent=`HTTP ${result.status}`;
+   return {...result,responsible};
+  };
+  report(ordered?'Ana termina primero. Luego enviamos a Bruno.':'Enviando dos solicitudes concurrentes a dos procesos API distintos...');
+  let responses;
+  if(ordered){const ana=await assign('a','Ana');responses=[ana,await assign('b','Bruno')];}
+  else responses=await Promise.all([assign('a','Ana'),assign('b','Bruno')]);
+  const final=await call('a',`/api/incidents/${encodeURIComponent(id)}`);
+  if(final.status!==200)throw Error(`No se pudo verificar Redis (HTTP ${final.status}).`);
+  if(!responses[0].instance||responses[0].instance===responses[1].instance)throw Error('No se verificaron dos procesos API distintos.');
+  if(responses.some(r=>![200,409].includes(r.status)))throw Error('Una API devolvió un resultado inesperado. Revisá Docker y las respuestas.');
+  if(responses.some(r=>!Array.isArray(r.body.trace)))throw Error('La API no incluye trazas. Reconstruí los contenedores con --build.');
+  evidence={executedAt:new Date().toISOString(),scenario:ordered?'sequential':'concurrent',incidentId:id,responses,final:final.body};
+  $('owner').textContent=final.body.assignedTo??'Sin responsable';
+  events=responses.flatMap(r=>r.body.trace.map(e=>({...e,responsible:r.responsible,instance:r.instance}))).sort((a,b)=>a.at-b.at);
+  const successes=responses.filter(r=>r.status===200).length;
+  const bothFree=responses.every(r=>r.body.trace.some(e=>e.step==='read'&&e.assignedTo===null));
+  if(successes===2&&bothFree){report(`Carrera observada: Ana y Bruno recibieron éxito. Redis terminó con ${final.body.assignedTo}. Una asignación fue sobrescrita.`);$('status').classList.add('bad');}
+  else if(successes===1){report(ordered?'En este orden no hubo carrera: Bruno consultó después de la asignación de Ana y recibió conflicto.':'Esta vez no se reprodujo la doble confirmación. Revisá la traza o repetí: enviar concurrentemente no garantiza ese intercalado.');}
+  else throw Error('La ejecución no produjo una asignación exitosa.');
+  $('raw').textContent=JSON.stringify(evidence,null,2);$('step').textContent='La ejecución terminó. Recorremos ahora las observaciones registradas.';
+  $('next').disabled=events.length===0;$('all').disabled=events.length===0;$('download').disabled=false;
+ }catch(error){report(`No hay una demo válida: ${error.message}`,true);$('raw').textContent=String(error);}
+ finally{busy=false;$('race').disabled=false;$('ordered').disabled=false;}
+}
+function advance(){
+ if(position>=events.length)return;
+ const event=events[position++];
+ const description=event.step==='read'?`Leyó responsable = ${event.assignedTo??'LIBRE'}.`:`Confirmó escritura de ${event.assignedTo}.`;
+ const lane=event.responsible==='Ana'?'A':'B';
+ for(const name of ['A','B'])$(`actor${name}`).classList.toggle('observed',name===lane);
+ $(`${event.step}${lane}`).classList.add('seen');$(`observation${lane}`).textContent=description;
+ $('step').textContent=`${position}/${events.length} · ${event.responsible}: ${description}`;
+ const tr=document.createElement('tr');
+ for(const text of [new Date(event.at).toLocaleTimeString('es-AR',{hour12:false})+`.`+String(event.at%1000).padStart(3,'0'),event.responsible,description]){const td=document.createElement('td');td.textContent=text;tr.append(td);}
+ $('events').append(tr);$('next').disabled=position>=events.length;$('all').disabled=position>=events.length;
+}
+$('race').addEventListener('click',()=>run(false));$('ordered').addEventListener('click',()=>run(true));
+$('next').addEventListener('click',advance);$('all').addEventListener('click',()=>{while(position<events.length)advance();});
+$('download').addEventListener('click',()=>{if(!evidence)return;const url=URL.createObjectURL(new Blob([JSON.stringify(evidence,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`race-${evidence.incidentId}.json`;a.click();URL.revokeObjectURL(url);});
+</script>
+</html>
