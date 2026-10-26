@@ -75,9 +75,13 @@ jobs:
         run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml up -d --build --wait
       - name: Compare vulnerable and protected assignment
         run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml run --rm demo
+      - name: Start visual demo gateway
+        run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml --profile viewer up -d --wait viewer
+      - name: Verify visual demo against real APIs
+        run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml run --rm demo node verify-race-viewer.mjs
       - name: Collect service logs
         if: failure()
         run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml logs --tail 100
       - name: Stop demo
         if: always()
-        run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml down
+        run: docker compose -f infrastructure/compose/docker-compose.race-demo.yml --profile viewer down

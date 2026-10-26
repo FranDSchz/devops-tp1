@@ -34,13 +34,26 @@ services:
     profiles: [tools]
     working_dir: /demo
     volumes:
-      - ../scripts/race-demo.mjs:/demo/race-demo.mjs:ro
+      - ../scripts:/demo:ro
       - ../../docs/evidence:/evidence
     environment:
       API_A: http://api-a:3000
       API_B: http://api-b:3000
       EVIDENCE_PATH: /evidence/race-condition.json
     command: [node, race-demo.mjs]
+    depends_on:
+      api-a:
+        condition: service_healthy
+      api-b:
+        condition: service_healthy
+  viewer:
+    image: nginx:alpine
+    profiles: [viewer]
+    ports:
+      - '127.0.0.1:8092:80'
+    volumes:
+      - ../race-viewer:/usr/share/nginx/html:ro
+      - ../nginx/race-viewer.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       api-a:
         condition: service_healthy

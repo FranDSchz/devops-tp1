@@ -1,0 +1,146 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dos peticiones, un incidente | OpsBoard</title>
+<style>
+:root{font-family:system-ui,sans-serif;color-scheme:dark;color:#edf4fa;background:#101923}*{box-sizing:border-box}body{margin:0;padding:22px clamp(14px,3vw,44px);max-width:1600px;margin-inline:auto}h1{font-size:clamp(28px,3vw,44px);margin:8px 0}p{margin:8px 0;line-height:1.45}.eyebrow{font-size:13px;letter-spacing:2px;color:#8ddfce;text-transform:uppercase}.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:16px 0}button,select{font:600 16px system-ui;padding:11px 16px;border:1px solid #60788f;border-radius:8px;color:#edf4fa;background:#223344;cursor:pointer}button.primary{background:#ffce68;color:#172330;border-color:#ffce68}button.active{border-color:#8ddfce;background:#25463f}button:disabled{opacity:.45;cursor:default}button:focus-visible,select:focus-visible{outline:3px solid #ffce68;outline-offset:2px}label{font-size:15px}.caption{font-size:clamp(18px,2vw,26px);min-height:70px;padding:15px 20px;background:#1c2d3d;border-left:5px solid #ffce68;border-radius:5px}.diagram{margin-top:15px;border-radius:14px;background:#142331;overflow:hidden}svg{width:100%;height:auto;display:block}svg text{font-family:system-ui,sans-serif;fill:#edf4fa}.path{fill:none;stroke:#526d83;stroke-width:3}.actorCircle{fill:#223c50;stroke:#89bacf;stroke-width:2}.api{fill:#1d3243;stroke:#5f7e95;stroke-width:2}.ticket{fill:#244052;stroke:#8ddfce;stroke-width:3}.halo{fill:none;stroke:#ffce68;stroke-width:8;opacity:0}.person{fill:none;stroke:#d6edf6;stroke-width:3;stroke-linecap:round}.token circle{fill:#ffce68;stroke:#142331;stroke-width:3}.token text{fill:#152330;font-size:17px;font-weight:800;text-anchor:middle}.result{font-size:21px;font-weight:750;text-anchor:middle}.snapshot{font-size:20px;text-anchor:middle;fill:#ffce68}.summary{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;font-size:18px;margin-top:12px;padding:14px;background:#1a2c39;border-radius:8px}.muted{color:#a9bdcc;font-size:14px}a{color:#8ddfce}details{margin-top:16px}pre{white-space:pre-wrap;overflow:auto;font-size:13px}.error{border-color:#ff858b}#real{font-weight:750;color:#8ddfce}#frameNote{padding:0 18px 14px;color:#afc4d2;font-size:14px}
+</style>
+<div class="eyebrow">OpsBoard / solicitudes HTTP reales / Docker + Redis</div><h1>Dos peticiones. Un mismo incidente.</h1><p>Dos personas intentan tomar un incidente que sólo admite un responsable.</p>
+<div class="toolbar"><button id="vulnerable" class="active">Ver el problema</button><button id="protected">Comparar con operación atómica</button><button id="run" class="primary">Ejecutar y animar peticiones reales</button><label><input type="checkbox" id="manual"> Avanzar manualmente</label></div>
+<div id="caption" class="caption" role="status" aria-live="polite">Ana y Bruno apuntan al mismo incidente. Pulsá ejecutar para crear uno y enviar las dos peticiones.</div>
+<div class="diagram"><svg id="scene" viewBox="0 0 1100 480" role="img" aria-label="Ana y Bruno envían solicitudes a dos APIs que comparten un incidente en Redis. Los paquetes representan peticiones y respuestas reales.">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#526d83"/></marker></defs>
+<path id="routeA" class="path" d="M175 135 L360 135 Q540 135 710 205" marker-end="url(#arrow)"/><path id="routeB" class="path" d="M175 345 L360 345 Q540 345 710 275" marker-end="url(#arrow)"/>
+<text x="450" y="55" text-anchor="middle" font-size="16">1. POST → 2. COMPROBAR → 3. ASIGNAR</text>
+<g transform="translate(115 135)"><circle class="actorCircle" r="49"/><circle class="person" cy="-14" r="12"/><path class="person" d="M-23 24Q-23 0 0 0Q23 0 23 24"/></g><text x="115" y="210" text-anchor="middle" font-size="29" font-weight="750">Ana</text><text id="responseA" x="115" y="242" class="result">—</text>
+<g transform="translate(115 345)"><circle class="actorCircle" r="49"/><circle class="person" cy="-14" r="12"/><path class="person" d="M-23 24Q-23 0 0 0Q23 0 23 24"/></g><text x="115" y="420" text-anchor="middle" font-size="29" font-weight="750">Bruno</text><text id="responseB" x="115" y="452" class="result">—</text>
+<rect class="api" x="282" y="95" width="136" height="80" rx="12"/><text x="350" y="128" text-anchor="middle" font-size="22">API A</text><text x="350" y="151" text-anchor="middle" font-size="13">contenedor 1</text>
+<rect class="api" x="282" y="305" width="136" height="80" rx="12"/><text x="350" y="338" text-anchor="middle" font-size="22">API B</text><text x="350" y="361" text-anchor="middle" font-size="13">contenedor 2</text>
+<text id="readA" x="515" y="105" class="snapshot">Consulta pendiente</text><text id="readB" x="515" y="385" class="snapshot">Consulta pendiente</text>
+<text id="engine" x="848" y="104" text-anchor="middle" font-size="20">Redis disponible</text><rect id="atomicHalo" class="halo" x="696" y="128" width="310" height="232" rx="22"/>
+<path class="ticket" d="M735 145H942L978 181V335H720V160Q720 145 735 145Z"/><path d="M942 145V181H978" fill="none" stroke="#8ddfce" stroke-width="3"/>
+<text x="848" y="199" text-anchor="middle" font-size="25" font-weight="750">INCIDENTE</text><text id="incident" x="848" y="225" text-anchor="middle" font-size="15">Sin crear</text><text x="848" y="260" text-anchor="middle" font-size="17">Responsable representado</text><text id="owner" x="848" y="304" text-anchor="middle" font-size="34" font-weight="800">LIBRE</text>
+<text x="848" y="395" text-anchor="middle" font-size="23">Redis compartido</text><text id="operation" x="848" y="423" text-anchor="middle" font-size="16">Consulta y escritura separadas</text>
+<g id="tokenA" class="token" opacity="0"><circle r="30"/><text dy="6" id="tokenTextA">POST</text></g><g id="tokenB" class="token" opacity="0"><circle r="30"/><text dy="6" id="tokenTextB">POST</text></g>
+</svg><div id="frameNote">Reconstrucción didáctica de una ejecución real. La espera y los turnos son conceptuales, no tiempos de cola medidos ni un candado persistente. Las escrituras se representan en un orden compatible con las lecturas y el GET final; los timestamps de confirmación no garantizan su orden global.</div></div>
+<div class="toolbar"><button id="play" disabled>Reproducir</button><button id="pause" disabled>Pausar al terminar el paso</button><button id="next" disabled>Siguiente paso</button><button id="restart" disabled>Volver al inicio</button><label>Ritmo <select id="speed"><option value="1300">Lento</option><option value="700">Normal</option></select></label><span id="counter" class="muted">Sin ejecución</span></div>
+<div class="summary"><span id="outcomes">Respuestas reales: pendientes</span><span>Redis al finalizar: <span id="real">pendiente</span></span></div>
+<p class="muted">La variante vulnerable tiene una pausa educativa de 500 ms. En la protegida, Redis ejecuta comprobar y asignar como una operación atómica: no se adquiere un candado de aplicación. Los empates de timestamp no prueban orden global. El estado final se consulta por GET.</p>
+<p class="muted">Seguridad web: el mismo patrón comprobar/usar puede permitir reutilizar un cupón de un solo uso. <a href="https://portswigger.net/web-security/race-conditions" target="_blank" rel="noreferrer">Referencia: PortSwigger Web Security Academy</a>.</p>
+<details><summary>Evidencia HTTP y observaciones del servidor</summary><button id="download" disabled>Guardar JSON</button><pre id="raw">Todavía no hay una ejecución.</pre></details>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let mode='vulnerable',evidence=null,steps=[],cursor=0,playing=false,working=false,stepping=false,generation=0;
+const animations=new Set(),lane=name=>name==='Ana'?'A':'B';
+function caption(text){$('caption').textContent=text;$('caption').classList.remove('error');}
+function controls(){for(const id of ['vulnerable','protected','run'])$(id).disabled=working;for(const id of ['play','next'])$(id).disabled=working||stepping||playing||!evidence||cursor>=steps.length;$('pause').disabled=!playing;$('restart').disabled=!evidence||working;$('download').disabled=!evidence;}
+function scene(){for(const l of ['A','B']){$(`response${l}`).textContent='—';$(`response${l}`).style.fill='#edf4fa';$(`read${l}`).textContent='Consulta pendiente';$(`token${l}`).setAttribute('opacity','0');}$('engine').textContent='Redis disponible';$('owner').textContent='LIBRE';$('owner').style.fill='#edf4fa';$('atomicHalo').style.opacity=0;$('operation').textContent=mode==='protected'?'Comprobar + asignar, indivisible':'Consulta y escritura separadas';}
+function stop(){generation++;playing=false;for(const animation of animations)animation.cancel();animations.clear();stepping=false;}
+async function request(api,path,body){const response=await fetch(`/${api}${path}`,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});return{status:response.status,instance:response.headers.get('x-instance-id'),body:await response.json()};}
+async function travel(name,back=false,label='POST',section='full'){
+ const l=lane(name),path=$(`route${l}`),token=$(`token${l}`),length=path.getTotalLength();$(`tokenText${l}`).textContent=label;token.setAttribute('opacity','1');
+ const frames=Array.from({length:31},(_,i)=>{const p=path.getPointAtLength(length*(section==='post' ? i/30*.33 : section==='db' ? (back?1-i/30*.6:.4+i/30*.6) : (back?1-i/30:i/30)));return{transform:`translate(${p.x}px,${p.y}px)`};});
+ const animation=token.animate(frames,{duration:Number($('speed').value),fill:'forwards',easing:'ease-in-out'});animations.add(animation);
+ try{await animation.finished;}finally{animations.delete(animation);token.setAttribute('opacity','0');animation.cancel();}
+}
+function reply(name,status){const el=$(`response${lane(name)}`);el.textContent=`HTTP ${status}`;el.style.fill=status===200?'#8ddfce':'#ffce68';}
+function buildSteps(responses){
+ const result=[{kind:'send'}];
+ if(mode==='protected'){
+  const winner=responses.find(r=>r.status===200),other=responses.find(r=>r.status===409);
+  if(!winner||!other)throw Error('La comparación requiere un éxito y un conflicto reales.');
+  result.push({kind:'atomicStart',name:winner.responsible,other:other.responsible},{kind:'atomicAssign',name:winner.responsible,other:other.responsible},{kind:'atomicFinish',name:winner.responsible,other:other.responsible},{kind:'atomicConflict',name:other.responsible});
+ }else{
+  const bothFree=responses.every(r=>r.status===200&&r.body.trace[0]?.assignedTo===null);
+  if(bothFree){
+   result.push({kind:'readBoth'});
+   const ordered=[...responses].sort((a,b)=>(a.responsible===evidence.final.assignedTo?1:0)-(b.responsible===evidence.final.assignedTo?1:0));
+   for(const r of ordered)result.push({kind:'written',name:r.responsible});
+  }else{
+   const events=responses.flatMap(r=>r.body.trace.map(e=>({...e,name:r.responsible,status:r.status}))).sort((a,b)=>a.at-b.at);
+   result.push(...events.map(e=>({...e,kind:e.step})));
+  }
+ }
+ result.push({kind:'end'});return result;
+}
+function pending(name,visible){
+ const l=lane(name),token=$(`token${l}`),path=$(`route${l}`),point=path.getPointAtLength(path.getTotalLength()*.5);
+ token.setAttribute('transform',`translate(${point.x} ${point.y})`);$(`tokenText${l}`).textContent='…';token.setAttribute('opacity',visible?'1':'0');
+}
+async function advance(){
+ if(stepping||cursor>=steps.length||!evidence)return;const g=generation;stepping=true;controls();const step=steps[cursor];
+ try{
+  if(step.kind==='send'){
+   caption('1. Ambos POST llegan a las APIs. Cada petición tiene que COMPROBAR y luego ASIGNAR el mismo incidente.');
+   await Promise.all([travel('Ana',false,'POST','post'),travel('Bruno',false,'POST','post')]);
+   if(g===generation){$('readA').textContent='POST recibido';$('readB').textContent='POST recibido';}
+  }
+  if(step.kind==='readBoth'){
+   caption('2. Las dos APIs consultan Redis ANTES de escribir. Ambas reciben LIBRE. Ninguna reservó el incidente.');
+   await Promise.all([travel('Ana',false,'LEER','db'),travel('Bruno',false,'LEER','db')]);
+   if(g!==generation)return;
+   await Promise.all([travel('Ana',true,'LIBRE','db'),travel('Bruno',true,'LIBRE','db')]);
+   if(g===generation){$('readA').textContent='Leyó LIBRE ✓';$('readB').textContent='Leyó LIBRE ✓';caption('VENTANA TOCTOU: ambos guardan la misma conclusión: puedo asignar. El recurso todavía está libre.');}
+  }
+  if(step.kind==='read'){
+   await travel(step.name,false,'LEER','db');if(g!==generation)return;
+   $(`read${lane(step.name)}`).textContent=`Leyó: ${step.assignedTo??'LIBRE'}`;
+   caption(`${step.name} comprobó ${step.assignedTo??'LIBRE'}.`);
+   if(step.status===409){await travel(step.name,true,'409');if(g===generation)reply(step.name,409);}
+  }
+  if(step.kind==='written'){
+   const previous=$('owner').textContent;
+   caption(previous==='LIBRE'?`3. ${step.name} escribe su nombre y recibe éxito. La otra solicitud conserva su lectura anterior: LIBRE.`:`4. ${step.name} NO vuelve a comprobar: escribe sobre ${previous}. También recibe éxito. ¡La primera asignación se pierde!`);
+   await travel(step.name,false,'ASIG','db');if(g!==generation)return;
+   $('owner').textContent=step.name;$('owner').style.fill=previous==='LIBRE'?'#8ddfce':'#ff858b';
+   await travel(step.name,true,'200');if(g===generation)reply(step.name,200);
+  }
+  if(step.kind==='atomicStart'){
+   $('atomicHalo').style.opacity=1;$('engine').textContent=`EJECUTANDO: ${step.name}`;
+   $(`read${lane(step.other)}`).textContent='PENDIENTE · aún no comprueba';pending(step.other,true);
+   caption(`Redis comienza el script de ${step.name}. La operación de ${step.other} queda pendiente de ejecución: NO puede leer dentro del script actual.`);
+   await travel(step.name,false,'LUA','db');if(g!==generation)return;$(`read${lane(step.name)}`).textContent='Comprobó LIBRE';
+  }
+  if(step.kind==='atomicAssign'){
+   caption(`El MISMO script asigna a ${step.name}. Redis sigue ejecutándolo. ${step.other} continúa pendiente, sin haber comprobado LIBRE.`);
+   $('owner').textContent=step.name;$('owner').style.fill='#8ddfce';$(`read${lane(step.name)}`).textContent='Comprobó + asignó';
+  }
+  if(step.kind==='atomicFinish'){
+   caption(`El script de ${step.name} TERMINA. Ahora puede ejecutarse la siguiente operación. El incidente ya quedó asignado a ${step.name}.`);
+   $('atomicHalo').style.opacity=0;$('engine').textContent='Script terminado · siguiente turno';
+   await travel(step.name,true,'200');if(g===generation){reply(step.name,200);pending(step.other,false);}
+  }
+  if(step.kind==='atomicConflict'){
+   caption(`Recién AHORA ${step.name} comprueba: encuentra OCUPADO. No escribe y recibe 409. No hubo dos lecturas libres.`);
+   $('engine').textContent=`EJECUTANDO: ${step.name}`;$('atomicHalo').style.opacity=1;
+   await travel(step.name,false,'LUA','db');if(g!==generation)return;$(`read${lane(step.name)}`).textContent='Leyó OCUPADO · no escribe';
+   await travel(step.name,true,'409');if(g===generation){reply(step.name,409);$('atomicHalo').style.opacity=0;$('engine').textContent='Redis disponible';}
+  }
+  if(step.kind==='end'){
+   $('owner').textContent=evidence.final.assignedTo??'LIBRE';
+   caption(evidence.responses.filter(r=>r.status===200).length===2?`DOS ÉXITOS para UN recurso: ambos creyeron ganar. Redis terminó con ${evidence.final.assignedTo}; la otra asignación fue sobrescrita.`:`UN éxito, UN conflicto: la segunda operación comprobó el estado después de terminar la primera.`);
+  }
+  if(g===generation){cursor++;$('counter').textContent=`Paso ${cursor} de ${steps.length}`;}
+ }catch(error){if(g===generation){playing=false;caption('Animación interrumpida: '+error.message);}}
+ finally{if(g===generation){stepping=false;controls();}}
+}
+async function play(){if(playing||stepping)return;playing=true;controls();const g=generation;while(playing&&cursor<steps.length&&g===generation){await advance();if(playing&&g===generation)await new Promise(resolve=>setTimeout(resolve,450));}if(g===generation){playing=false;controls();}}
+async function run(){
+ if(working)return;stop();evidence=null;steps=[];cursor=0;scene();working=true;controls();$('real').textContent='consultando...';$('outcomes').textContent='Solicitudes reales en curso';$('raw').textContent='Ejecutando...';$('counter').textContent='Consultando Docker';
+ try{
+  caption('Enviando solicitudes HTTP reales a dos APIs en Docker. Después se reconstruirá el flujo con sus resultados.');
+  const created=await request('a','/api/incidents',{title:'Demo animada: API de pagos caída',service:'payments',severity:'high'});if(created.status!==201)throw Error('No se pudo crear el incidente.');
+  const id=created.body.id;$('incident').textContent='#'+id.slice(0,8);
+  const settled=await Promise.allSettled([['a','Ana'],['b','Bruno']].map(async([api,responsible])=>({...await request(api,`/api/demo/incidents/${id}/assign/${mode}?trace=true`,{responsible}),responsible})));
+  const failed=settled.find(r=>r.status==='rejected');if(failed)throw failed.reason;const responses=settled.map(r=>r.value);
+  if(!responses[0].instance||responses[0].instance===responses[1].instance)throw Error('No se verificaron dos procesos distintos.');
+  if(responses.some(r=>![200,409].includes(r.status)||!Array.isArray(r.body.trace)))throw Error('Respuesta inesperada. Reconstruí las APIs con --build.');
+  if(mode==='protected'&&responses.some(r=>r.body.trace[0]?.step!=='atomic'))throw Error('Faltan observaciones atómicas: reconstruí las APIs con --build.');
+  const final=await request('a',`/api/incidents/${id}`);if(final.status!==200)throw Error('Falló la consulta final del incidente.');
+  evidence={executedAt:new Date().toISOString(),mode,responses,final:final.body};steps=buildSteps(responses);
+  $('real').textContent=final.body.assignedTo??'Sin responsable';$('outcomes').textContent=responses.map(r=>`${r.responsible}: HTTP ${r.status}`).join(' · ');$('raw').textContent=JSON.stringify(evidence,null,2);$('counter').textContent=`Paso 0 de ${steps.length}`;caption('Ejecución real terminada. Listos para representar su flujo a velocidad didáctica.');
+ }catch(error){caption('No hay una demo válida: '+error.message);$('caption').classList.add('error');$('real').textContent='sin verificar';$('outcomes').textContent='Ejecución no válida';}
+ finally{working=false;controls();}if(evidence&&!$('manual').checked)void play();
+}
+for(const selected of ['vulnerable','protected'])$(selected).onclick=()=>{if(working)return;stop();mode=selected;evidence=null;steps=[];cursor=0;scene();for(const id of ['vulnerable','protected'])$(id).classList.toggle('active',id===mode);$('real').textContent='pendiente';$('outcomes').textContent='Respuestas reales: pendientes';$('counter').textContent='Sin ejecución';$('raw').textContent='Todavía no hay una ejecución.';caption(mode==='protected'?'Comparación: comprobar y asignar serán una operación indivisible en Redis.':'Ana y Bruno pueden leer LIBRE antes de que alguno escriba.');controls();};
+$('run').onclick=run;$('play').onclick=()=>void play();$('next').onclick=()=>void advance();$('pause').onclick=()=>{playing=false;controls();};$('restart').onclick=()=>{stop();cursor=0;scene();$('counter').textContent=`Paso 0 de ${steps.length}`;caption('Reproducción reiniciada. Conserva las mismas respuestas reales.');controls();};
+$('download').onclick=()=>{if(!evidence)return;const url=URL.createObjectURL(new Blob([JSON.stringify(evidence,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`race-${evidence.final.id}.json`;a.click();URL.revokeObjectURL(url);};
+</script></html>

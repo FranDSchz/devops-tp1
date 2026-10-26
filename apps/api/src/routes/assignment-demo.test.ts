@@ -10,6 +10,24 @@ afterEach(() => {
 });
 
 describe("assignment demo routes", () => {
+  it("returns observations supplied by the store when trace is requested", async () => {
+    vi.stubEnv("RACE_DEMO_ENABLED", "true");
+    vi.mocked(assignIncident).mockImplementationOnce(async (_id, owner, _mode, observe) => {
+      observe?.({ step: "read", at: 100, assignedTo: null });
+      observe?.({ step: "written", at: 600, assignedTo: owner });
+      return "assigned";
+    });
+    const app = buildApp();
+    try {
+      const response = await app.inject({ method: "POST",
+        url: "/api/demo/incidents/one/assign/vulnerable?trace=true", payload: { responsible: "Ana" } });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().trace).toEqual([
+        { step: "read", at: 100, assignedTo: null },
+        { step: "written", at: 600, assignedTo: "Ana" },
+      ]);
+    } finally { await app.close(); }
+  });
   it("does not expose either demo route by default", async () => {
     vi.stubEnv("RACE_DEMO_ENABLED", "false");
     const app = buildApp();
