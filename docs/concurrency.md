@@ -1,5 +1,44 @@
 # Condiciones de carrera: asignar un incidente
 
+## Marco teórico
+
+### ¿Qué es una condición de carrera?
+
+Ocurre cuando varias operaciones acceden a un mismo estado y el resultado
+depende del orden en que se intercalan. Dos solicitudes pueden ser correctas
+por separado y aun así producir un resultado incorrecto al ejecutarse al
+mismo tiempo. En este caso, la regla es que un incidente solo puede asignarse
+a un responsable.
+
+### ¿Cuándo aparece el problema?
+
+La secuencia peligrosa es leer el estado, decidir y escribir en pasos
+separados. Una solicitud puede leer que el incidente está libre y, antes de
+escribir, otra puede leer lo mismo. Ambas toman la decisión sobre un estado
+que ya puede haber cambiado cuando llega su escritura. No hace falta que dos
+hilos ejecuten código simultáneamente: las solicitudes pueden alternarse
+mientras esperan respuestas de Redis.
+
+### ¿Qué consecuencia tiene en esta asignación?
+
+Las dos solicitudes pueden recibir una confirmación de éxito, aunque Redis
+termine guardando un solo responsable. La última escritura reemplaza a la
+primera: se pierde una actualización y uno de los clientes recibió una
+confirmación que ya no coincide con el estado final. Consultar solo el valor
+guardado no alcanza para detectar esa doble confirmación; también hay que
+examinar las dos respuestas.
+
+### ¿Cómo se evita?
+
+La comprobación de que el incidente está libre y la escritura del responsable
+deben ejecutarse como una sola operación sobre el estado compartido. Así, una
+solicitud completa la asignación y la siguiente encuentra el incidente
+ocupado. En esta demo se usa un script Lua ejecutado por Redis para impedir
+que otra solicitud se intercale entre la comprobación y la escritura. Un
+bloqueo guardado solo en la memoria de una API no coordinaría a las demás
+instancias. El código `409 Conflict` comunica que la segunda asignación no
+se realizó; la garantía la da la operación atómica, no el código HTTP.
+
 ## Objetivo y alcance
 
 TP2, tema 13 del grupo 8: dos solicitudes simultaneas intentan asignar el mismo
