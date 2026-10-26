@@ -129,7 +129,8 @@ docker compose -f infrastructure/compose/docker-compose.blue-green.yml up -d --b
 ~~~
 
 Al iniciar desde la configuración incluida en el repositorio, `env.conf`
-apunta a blue.
+apunta a green. Para reproducir la secuencia desde blue, ejecutar
+`./infrastructure/scripts/switch-env.sh blue` antes del paso 2.
 
 Abrir `http://localhost:8081/demo/blue-green` en el navegador y dejar la
 página visible. Es una ruta de la misma web de OpsBoard: consulta al proxy
@@ -226,6 +227,41 @@ En esas muestras no se observaron errores. Los **597 ms** corresponden al
 rollback medido en aquel ensayo, desde el comando hasta Nginx recargado y
 sirviendo blue. Son resultados de una prueba anterior, no una medición de
 esta ejecución ni una garantía de cero interrupciones bajo cualquier carga.
+
+### Ensayo de rollback (2026-10-19)
+
+- **Entorno:** stack local (`infrastructure/compose/docker-compose.blue-green.yml`)
+- **Escenario:** el entorno activo es green (versión nueva). Se simula un problema y se ejecuta el rollback a blue.
+
+#### Pasos ejecutados
+
+```bash
+# 1. Verificar que green es el entorno activo antes del rollback
+curl -s http://localhost:8081/health | grep instance
+# → responde instancias green-api-*
+
+# 2. Iniciar prueba de carga continua en segundo plano
+./infrastructure/scripts/load-test.sh http://localhost:8081/health 30 &
+
+# 3. Ejecutar el rollback
+time ./infrastructure/scripts/switch-env.sh blue
+
+# 4. Verificar que blue es el entorno activo después del rollback
+curl -s http://localhost:8081/health | grep instance
+# → responde instancias blue-api-*
+```
+
+#### Resultado
+
+| Métrica | Valor |
+|---|---|
+| Total requests durante el rollback | 129 |
+| Requests exitosos (2xx) | 129 |
+| Errores 5xx | 0 |
+| Tasa de error | 0% |
+| Tiempo de rollback | 597ms |
+
+El rollback completo (desde el comando hasta nginx recargado y sirviendo blue) tomó **menos de 600ms** sin interrumpir el servicio. El entorno blue respondió correctamente en la verificación post-rollback.
 
 ## Archivos que intervienen
 
